@@ -26,6 +26,10 @@ const WHATSAPP_GROUP_URL =
   process.env.EXPO_PUBLIC_WHATSAPP_GROUP_URL ||
   'https://chat.whatsapp.com/REPLACE_WITH_REAL_INVITE';
 
+// Display-only social-proof seed added to the live ticker. Does NOT touch the
+// real signup counter, so ranks still start at #1 and the first 100 keep winning.
+const TICKER_SEED = Number(process.env.EXPO_PUBLIC_TICKER_SEED) || 0;
+
 // Design tokens — one accent, restrained neutrals.
 const C = {
   paper: '#FFFFFF',
@@ -231,11 +235,12 @@ function LiveCount() {
     ).start();
   }, []);
   if (count == null) return null;
+  const total = count + TICKER_SEED;
   return (
     <View style={styles.live}>
       <Animated.View style={[styles.liveDot, { opacity: pulse }]} />
       <Text style={styles.liveText}>
-        {count > 0 ? `${count.toLocaleString()} ${count === 1 ? 'fan' : 'fans'} joined` : 'Be the first to join'}
+        {total > 0 ? `${total.toLocaleString()} ${total === 1 ? 'fan' : 'fans'} joined` : 'Be the first to join'}
       </Text>
     </View>
   );
