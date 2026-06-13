@@ -102,6 +102,14 @@ function dayLabel(dayKey, todayKey) {
   });
 }
 
+// Kickoff time for a match, e.g. '2:00 PM'. Defaults to the viewer's local
+// zone; pass a `timeZone` (IANA name) to force one.
+function timeLabel(iso, timeZone) {
+  const opts = { hour: 'numeric', minute: '2-digit' };
+  if (timeZone) opts.timeZone = timeZone;
+  return new Date(iso).toLocaleTimeString('en-US', opts);
+}
+
 module.exports = {
   ESPN_SCOREBOARD,
   mapEspnEvents,
@@ -110,4 +118,5 @@ module.exports = {
   ymd,
   groupByDay,
   dayLabel,
+  timeLabel,
 };

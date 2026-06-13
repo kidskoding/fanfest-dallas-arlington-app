@@ -21,7 +21,7 @@ import { flagFor } from './src/flags';
 import { LOOKING_TYPES } from './src/lookingTypes';
 import { FIXTURES } from './src/fixtures';
 import { VENUES } from './src/venues';
-import { fetchUpcoming, groupByDay, dayLabel } from './src/matches';
+import { fetchUpcoming, groupByDay, dayLabel, timeLabel } from './src/matches';
 import { submitSignup, subscribeToCount, subscribeToFans } from './src/signup';
 import { shareRank } from './src/share';
 import { buzz, playWinSound } from './src/celebrate';
@@ -513,7 +513,7 @@ function LiveMatchCard({ m }) {
             <Text style={styles.livePillText}>LIVE {m.clock}</Text>
           </View>
         ) : (
-          <Text style={styles.matchWhen}>{m.state === 'post' ? 'Full time' : m.detail}</Text>
+          <Text style={styles.matchWhen}>{m.state === 'post' ? 'Full time' : timeLabel(m.dateISO)}</Text>
         )}
       </View>
       <View style={styles.scoreRow}>
