@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // MVP: public feed, no sign-in required. Validation guards shape/size to
+    // limit abuse. HARDENING: enable Anonymous Auth + App Check, then require
+    // request.auth != null and pin uid == request.auth.uid.
+    match /messages/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.body is string
+                    && request.resource.data.body.size() > 0
+                    && request.resource.data.body.size() <= 500
+                    && request.resource.data.sid is string
+                    && request.resource.data.sid.size() <= 64;
+      allow update, delete: if false;
+    }
+  }
+}
