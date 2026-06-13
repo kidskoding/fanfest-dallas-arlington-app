@@ -16,7 +16,14 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "qr": "node scripts/gen-qr.mjs",
+    "qr:verify": "node scripts/verify-qr.mjs"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "qrcode": "^1.5.4"
+  }
 }
