@@ -555,6 +555,7 @@ function FixtureCard({ m }) {
 function MatchesScreen() {
   const [matches, setMatches] = useState(null); // null = loading
   const [failed, setFailed] = useState(false);
+  const [dayIndex, setDayIndex] = useState(0); // which day's page is shown
 
   useEffect(() => {
     let alive = true;
@@ -571,6 +572,18 @@ function MatchesScreen() {
   const groups = groupByDay(list);
   const todayKey = new Date().toISOString().slice(0, 10);
 
+  // Open on today's page once matches arrive (fall back to the first day).
+  useEffect(() => {
+    if (!matches) return;
+    const g = groupByDay(matches);
+    const today = new Date().toISOString().slice(0, 10);
+    const i = g.findIndex((x) => x.day === today);
+    setDayIndex(i >= 0 ? i : 0);
+  }, [matches]);
+
+  const pageIndex = groups.length ? Math.min(dayIndex, groups.length - 1) : 0;
+  const currentDay = groups[pageIndex];
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <EnvBadge />
@@ -586,14 +599,33 @@ function MatchesScreen() {
           <Text style={styles.muted}>Live scores unavailable right now — showing the schedule.</Text>
           {FIXTURES.map((m) => <FixtureCard key={m.id} m={m} />)}
         </>
-      ) : (
-        groups.map((g) => (
-          <View key={g.day}>
-            <Text style={styles.daySubhead}>{dayLabel(g.day, todayKey)}</Text>
-            {g.matches.map((m) => <LiveMatchCard key={m.id} m={m} />)}
+      ) : currentDay ? (
+        <>
+          <View style={styles.pager}>
+            <Pressable
+              onPress={() => setDayIndex(pageIndex - 1)}
+              disabled={pageIndex === 0}
+              style={[styles.pagerBtn, pageIndex === 0 && styles.pagerBtnOff]}
+            >
+              <Text style={styles.pagerArrow}>‹</Text>
+            </Pressable>
+            <View style={styles.pagerMid}>
+              <Text style={styles.pagerDay}>{dayLabel(currentDay.day, todayKey)}</Text>
+              <Text style={styles.pagerCount}>
+                {currentDay.matches.length} {currentDay.matches.length === 1 ? 'match' : 'matches'} · day {pageIndex + 1}/{groups.length}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setDayIndex(pageIndex + 1)}
+              disabled={pageIndex >= groups.length - 1}
+              style={[styles.pagerBtn, pageIndex >= groups.length - 1 && styles.pagerBtnOff]}
+            >
+              <Text style={styles.pagerArrow}>›</Text>
+            </Pressable>
           </View>
-        ))
-      )}
+          {currentDay.matches.map((m) => <LiveMatchCard key={m.id} m={m} />)}
+        </>
+      ) : null}
 
       <Text style={[styles.sectionTitle, { marginTop: 28 }]}>Where to watch</Text>
       {VENUES.map((v) => (
@@ -765,6 +797,13 @@ const styles = StyleSheet.create({
 
   // Live match card (ESPN feed)
   daySubhead: { fontSize: 13, fontWeight: '800', color: C.sub, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 14, marginBottom: 8 },
+  pager: { flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 4 },
+  pagerBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
+  pagerBtnOff: { opacity: 0.35 },
+  pagerArrow: { fontSize: 22, fontWeight: '800', color: C.ink, marginTop: -2 },
+  pagerMid: { flex: 1, alignItems: 'center' },
+  pagerDay: { fontSize: 16, fontWeight: '800', color: C.ink, letterSpacing: -0.3 },
+  pagerCount: { fontSize: 12, fontWeight: '600', color: C.faint, marginTop: 2 },
   scoreRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   teamCol: { flex: 1, alignItems: 'center' },
   crest: { width: 34, height: 34, marginBottom: 6 },
