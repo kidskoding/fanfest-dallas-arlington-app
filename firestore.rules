@@ -21,10 +21,22 @@ service cloud.firestore {
     }
 
     // Dev sandbox: local `expo start` writes here so test data never touches the
-    // real `signups` collection. Wide-open on purpose (read + delete) so dev data
-    // is easy to inspect and wipe. Never used by the production build.
+    // real `signups` collection. Read + delete are open so dev data is easy to
+    // inspect and wipe. Create is shape/size-validated (mirroring `signups`) so a
+    // runaway or malicious client cannot flood the shared project with junk.
+    // Never used by the production build.
     match /signups_dev/{id} {
-      allow read, create, delete: if true;
+      allow read, delete: if true;
+      allow create: if request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 100
+                    && request.resource.data.country is string
+                    && request.resource.data.country.size() <= 64
+                    && request.resource.data.team is string
+                    && request.resource.data.team.size() <= 64
+                    && request.resource.data.connectIntent is string
+                    && request.resource.data.connectIntent.size() <= 280
+                    && request.resource.data.position is int;
       allow update: if false;
     }
 

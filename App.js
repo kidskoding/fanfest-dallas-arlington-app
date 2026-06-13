@@ -21,15 +21,27 @@ import { shareRank } from './src/share';
 import { buzz, playWinSound } from './src/celebrate';
 import env from './src/env';
 
-// Fixed banner shown only in dev so a sandbox session can never be mistaken
-// for the live event app.
+// Banner shown on any non-real-prod-deploy so a session can never be mistaken
+// for the live event app:
+//  - dev sandbox (writes to signups_dev) -> purple "DEV MODE"
+//  - LOCAL build forced to prod (writes REAL data) -> red warning
+//  - real production deploy -> nothing
 function DevBadge() {
-  if (!env.isDev) return null;
-  return (
-    <View style={styles.devBadge} pointerEvents="none">
-      <Text style={styles.devBadgeText}>🛠 DEV MODE · writing to signups_dev (not event data)</Text>
-    </View>
-  );
+  if (env.isDev) {
+    return (
+      <View style={styles.devBadge} pointerEvents="none">
+        <Text style={styles.devBadgeText}>🛠 DEV MODE · writing to signups_dev (not event data)</Text>
+      </View>
+    );
+  }
+  if (env.isLocalBuild) {
+    return (
+      <View style={[styles.devBadge, styles.warnBadge]} pointerEvents="none">
+        <Text style={styles.devBadgeText}>⚠️ LOCAL BUILD · writing to REAL event data</Text>
+      </View>
+    );
+  }
+  return null;
 }
 
 // Single master WhatsApp group invite, configured via EXPO_PUBLIC_WHATSAPP_GROUP_URL
@@ -281,7 +293,7 @@ export default function App() {
     const won = isWinner(position);
     const spotsLeft = Math.max(0, WINNER_CUTOFF - position);
     return (
-      <View style={[styles.container, styles.resultBg]}>
+      <View style={[styles.container, styles.resultBg, styles.resultPad]}>
         <DevBadge />
         {won && <Confetti extra={flagFor(team)} />}
         <View style={styles.resultBox}>
@@ -386,7 +398,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 20, paddingTop: Platform.OS === 'web' ? 40 : 60, paddingBottom: 60 },
   devBadge: { backgroundColor: '#7C3AED', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 14 },
+  warnBadge: { backgroundColor: '#DC2626' },
   devBadgeText: { color: '#fff', fontWeight: '800', fontSize: 12, textAlign: 'center' },
+  resultPad: { paddingTop: Platform.OS === 'web' ? 14 : 52, paddingHorizontal: 16 },
   title: { fontSize: 34, fontWeight: '900', color: '#111', letterSpacing: -0.5 },
   subtitle: { fontSize: 15, color: '#555', marginTop: 6, marginBottom: 16, lineHeight: 21 },
 

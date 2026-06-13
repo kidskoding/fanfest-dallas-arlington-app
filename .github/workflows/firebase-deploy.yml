@@ -21,8 +21,11 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Build web (Expo export)
-        run: npx expo export -p web
+      - name: Build web (Expo export, pinned to prod)
+        run: EXPO_PUBLIC_ENV=prod npx expo export -p web
+
+      - name: Assert prod bundle (refuse to ship a dev build to live)
+        run: EXPO_PUBLIC_ENV=prod node scripts/assert-prod-bundle.js
 
       - name: Deploy to Firebase Hosting (live)
         uses: FirebaseExtended/action-hosting-deploy@v0

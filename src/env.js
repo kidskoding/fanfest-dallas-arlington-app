@@ -9,4 +9,8 @@ const { resolveEnv } = require('./envCore');
 const isDevGlobal = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
 const env = resolveEnv({ forceEnv: process.env.EXPO_PUBLIC_ENV, isDev: isDevGlobal });
 
-module.exports = env; // { isDev, label, suffix }
+// `isLocalBuild` is the raw bundler flag (true under `expo start`), independent of
+// the EXPO_PUBLIC_ENV override. It lets the UI warn when a LOCAL machine is forced
+// to prod (writing real data) — a state that would otherwise look identical to a
+// real production deploy.
+module.exports = { ...env, isLocalBuild: isDevGlobal }; // { isDev, label, suffix, isLocalBuild }
