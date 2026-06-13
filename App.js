@@ -17,6 +17,8 @@ import { NATIONS } from './src/nations';
 import { flagFor } from './src/flags';
 import { isWinner, WINNER_CUTOFF } from './src/position';
 import { submitSignup, subscribeToCount } from './src/signup';
+import { shareRank } from './src/share';
+import { buzz, playWinSound } from './src/celebrate';
 
 // Single master WhatsApp group invite, configured via EXPO_PUBLIC_WHATSAPP_GROUP_URL
 // in .env (read at build time). Fallback is a dead placeholder.
@@ -66,20 +68,25 @@ function AnimatedCount({ value, style }) {
 // Confetti — emoji rain on the win screen. Pure Animated, no dependency.
 // ---------------------------------------------------------------------------
 const CONFETTI = ['🎉', '⚽', '🏆', '🥳', '✨', '🎊', '🔥'];
-function Confetti({ count = 28 }) {
+function Confetti({ count = 32, extra }) {
   const { width, height } = useWindowDimensions();
+  // Weight the fan's team flag heavily so the rain feels personal.
+  const pool = useMemo(
+    () => (extra ? [extra, extra, extra, ...CONFETTI] : CONFETTI),
+    [extra]
+  );
   const pieces = useMemo(
     () =>
       Array.from({ length: count }, (_, i) => ({
         key: i,
-        emoji: CONFETTI[i % CONFETTI.length],
+        emoji: pool[i % pool.length],
         x: Math.random() * width,
         delay: Math.random() * 600,
         duration: 2200 + Math.random() * 1600,
         size: 20 + Math.random() * 18,
         fall: new Animated.Value(0),
       })),
-    [width, count]
+    [width, count, pool]
   );
   useEffect(() => {
     const anims = pieces.map((p) =>
@@ -204,6 +211,7 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [position, setPosition] = useState(null);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState('');
 
   // Entrance + CTA pulse animations.
   const entrance = useRef(new Animated.Value(0)).current;
@@ -223,10 +231,18 @@ export default function App() {
     ).start();
   }, []);
 
+  // Win celebration: fire sound + haptic once a winning position lands.
+  useEffect(() => {
+    if (position === null) return;
+    buzz(isWinner(position) ? [60, 30, 120, 30, 220] : 40);
+    if (isWinner(position)) playWinSound();
+  }, [position]);
+
   const canSubmit = name.trim() && country && team && !submitting;
 
   const onSubmit = async () => {
     if (!canSubmit) return;
+    buzz(20);
     setSubmitting(true);
     setError('');
     try {
@@ -240,16 +256,27 @@ export default function App() {
 
   const openWhatsApp = () => Linking.openURL(WHATSAPP_GROUP_URL);
 
+  const onShare = async () => {
+    const status = await shareRank({ name, position, team, won: isWinner(position) });
+    if (status === 'copied') setToast('Link copied — paste it anywhere! 📋');
+    else if (status === 'shared') setToast('Shared! 🙌');
+    else if (status === 'unsupported') setToast('Sharing not supported on this device 🤷');
+    if (status !== 'cancelled') setTimeout(() => setToast(''), 2400);
+  };
+
   // ---- Result / win screen ----
   if (position !== null) {
     const won = isWinner(position);
     const spotsLeft = Math.max(0, WINNER_CUTOFF - position);
     return (
       <View style={[styles.container, styles.resultBg]}>
-        {won && <Confetti />}
+        {won && <Confetti extra={flagFor(team)} />}
         <View style={styles.resultBox}>
           <Text style={styles.kicker}>{won ? "YOU'RE IN. AND YOU WON. 🏆" : "YOU'RE IN. 🎟️"}</Text>
           <AnimatedCount value={position} style={styles.bigNumber} />
+          <Text style={styles.identity}>
+            {flagFor(country)} {name.trim()} · {flagFor(team)} {team} fan
+          </Text>
           <Text style={styles.resultText}>
             {won
               ? `Top ${WINNER_CUTOFF} — you bagged one of the prizes! 🎉`
@@ -264,6 +291,10 @@ export default function App() {
           <PressableScale style={styles.whatsappBtn} onPress={openWhatsApp}>
             <Text style={styles.whatsappBtnText}>💬  Join the FanFest WhatsApp</Text>
           </PressableScale>
+          <PressableScale style={styles.shareBtn} onPress={onShare}>
+            <Text style={styles.shareBtnText}>📣  Share my rank & challenge friends</Text>
+          </PressableScale>
+          {toast ? <Text style={styles.toast}>{toast}</Text> : null}
         </View>
         <StatusBar style="auto" />
       </View>
@@ -407,6 +438,7 @@ const styles = StyleSheet.create({
   resultBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28 },
   kicker: { fontSize: 16, color: '#9db2ff', fontWeight: '800', letterSpacing: 1, textAlign: 'center' },
   bigNumber: { fontSize: 96, fontWeight: '900', color: '#fff', marginVertical: 6 },
+  identity: { fontSize: 16, color: '#9db2ff', fontWeight: '700', marginBottom: 14, textAlign: 'center' },
   resultText: { fontSize: 18, color: '#cdd3e6', textAlign: 'center', marginBottom: 28, lineHeight: 25 },
 
   progressWrap: {
@@ -432,4 +464,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   whatsappBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+
+  shareBtn: {
+    marginTop: 14,
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 26,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  shareBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  toast: { marginTop: 16, color: '#9be8b0', fontWeight: '700', fontSize: 14, textAlign: 'center' },
 });
