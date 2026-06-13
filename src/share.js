@@ -15,7 +15,7 @@ export async function shareRank({ name, position, team, won }) {
 
   if (isWeb && navigator.share) {
     try {
-      await navigator.share({ title: 'FIFA FanFest 2026 ⚽', text, url: SHARE_URL });
+      await navigator.share({ title: 'FanFest 2026 ⚽', text, url: SHARE_URL });
       return 'shared';
     } catch (e) {
       if (e && e.name === 'AbortError') return 'cancelled';

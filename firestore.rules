@@ -1,48 +1,54 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // MVP: public, no auth. Validation guards shape/size to limit abuse.
-    // Accepted MVP risk: public counter writes could be inflated; acceptable
-    // for the event window. HARDENING (parked): Anonymous Auth + App Check.
+    // MVP: public, no auth. The public `signups` directory is readable so fans
+    // can see the community; sensitive fields (full name, goal) live in the
+    // read-denied `signups_private`. Create rules validate shape/size to limit
+    // abuse. Accepted MVP risk: public counter writes could be inflated.
+    // HARDENING (parked): Anonymous Auth + App Check.
+
+    // -- Public fan directory --
+    function validPublicSignup() {
+      return request.resource.data.firstName is string
+             && request.resource.data.firstName.size() > 0
+             && request.resource.data.firstName.size() <= 80
+             && request.resource.data.country is string
+             && request.resource.data.country.size() <= 64
+             && request.resource.data.team is string
+             && request.resource.data.team.size() <= 64
+             && request.resource.data.lookingType is string
+             && request.resource.data.lookingType.size() > 0
+             && request.resource.data.lookingType.size() <= 64
+             && request.resource.data.position is int;
+    }
+    function validPrivateSignup() {
+      return request.resource.data.fullName is string
+             && request.resource.data.fullName.size() > 0
+             && request.resource.data.fullName.size() <= 100
+             && request.resource.data.lookingGoal is string
+             && request.resource.data.lookingGoal.size() <= 280;
+    }
 
     match /signups/{id} {
-      allow read: if false;
-      allow create: if request.resource.data.name is string
-                    && request.resource.data.name.size() > 0
-                    && request.resource.data.name.size() <= 100
-                    && request.resource.data.country is string
-                    && request.resource.data.country.size() <= 64
-                    && request.resource.data.team is string
-                    && request.resource.data.team.size() <= 64
-                    && request.resource.data.lookingType is string
-                    && request.resource.data.lookingType.size() > 0
-                    && request.resource.data.lookingType.size() <= 64
-                    && request.resource.data.lookingGoal is string
-                    && request.resource.data.lookingGoal.size() <= 280
-                    && request.resource.data.position is int;
+      allow read: if true; // public directory (no sensitive fields here)
+      allow create: if validPublicSignup();
+      allow update, delete: if false;
+    }
+    match /signups_private/{id} {
+      allow read: if false; // organizer-only fields; never exposed to clients
+      allow create: if validPrivateSignup();
       allow update, delete: if false;
     }
 
-    // Dev sandbox: local `expo start` writes here so test data never touches the
-    // real `signups` collection. Read + delete are open so dev data is easy to
-    // inspect and wipe. Create is shape/size-validated (mirroring `signups`) so a
-    // runaway or malicious client cannot flood the shared project with junk.
-    // Never used by the production build.
+    // -- Dev sandboxes (local `expo start`): wide-open read + delete to inspect/wipe --
     match /signups_dev/{id} {
       allow read, delete: if true;
-      allow create: if request.resource.data.name is string
-                    && request.resource.data.name.size() > 0
-                    && request.resource.data.name.size() <= 100
-                    && request.resource.data.country is string
-                    && request.resource.data.country.size() <= 64
-                    && request.resource.data.team is string
-                    && request.resource.data.team.size() <= 64
-                    && request.resource.data.lookingType is string
-                    && request.resource.data.lookingType.size() > 0
-                    && request.resource.data.lookingType.size() <= 64
-                    && request.resource.data.lookingGoal is string
-                    && request.resource.data.lookingGoal.size() <= 280
-                    && request.resource.data.position is int;
+      allow create: if validPublicSignup();
+      allow update: if false;
+    }
+    match /signups_private_dev/{id} {
+      allow read, delete: if true;
+      allow create: if validPrivateSignup();
       allow update: if false;
     }
 

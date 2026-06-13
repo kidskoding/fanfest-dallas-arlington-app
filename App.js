@@ -13,21 +13,30 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill';
 import { NATIONS } from './src/nations';
 import { flagFor } from './src/flags';
 import { LOOKING_TYPES } from './src/lookingTypes';
-import { submitSignup, subscribeToCount } from './src/signup';
+import { FIXTURES } from './src/fixtures';
+import { VENUES } from './src/venues';
+import { submitSignup, subscribeToCount, subscribeToFans } from './src/signup';
 import { shareRank } from './src/share';
 import { buzz, playWinSound } from './src/celebrate';
 import env from './src/env';
+
+// Make flag emoji render on platforms (web/Windows) that lack them natively.
+if (Platform.OS === 'web') polyfillCountryFlagEmojis();
 
 const WHATSAPP_GROUP_URL =
   process.env.EXPO_PUBLIC_WHATSAPP_GROUP_URL ||
   'https://chat.whatsapp.com/REPLACE_WITH_REAL_INVITE';
 
+// Tubi streams the World Cup matches for free. Per-match deep links can be set
+// on each fixture later; for now every match points to Tubi.
+const TUBI_URL = process.env.EXPO_PUBLIC_TUBI_URL || 'https://tubi.tv';
+
 // Display-only social-proof seed added to the live "fans joined" ticker. Does
-// not touch the real signup counter. Only applied in prod — the dev sandbox
-// shows the true count.
+// not touch the real signup counter. Only applied in prod.
 const TICKER_SEED = env.isDev ? 0 : Number(process.env.EXPO_PUBLIC_TICKER_SEED) || 0;
 
 // Design tokens — one accent, restrained neutrals.
@@ -39,6 +48,7 @@ const C = {
   line: '#E5E7EB',
   lineFocus: '#0A0A0A',
   accent: '#059669',
+  accentSoft: '#ECFDF5',
   hero: '#0A0A0A',
   heroText: '#FFFFFF',
   heroSub: '#A1A1AA',
@@ -46,6 +56,15 @@ const C = {
   whatsapp: '#1FAF5A',
   warn: '#DC2626',
 };
+
+// Flag glyphs use the polyfill font on web so they render everywhere.
+const FLAG_FONT =
+  Platform.OS === 'web'
+    ? { fontFamily: '"Twemoji Country Flags", system-ui, -apple-system, sans-serif' }
+    : null;
+
+const openMaps = (q) =>
+  Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`);
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -137,7 +156,11 @@ function Confetti({ count = 36 }) {
   );
 }
 
-// Labeled text input with a focus ring.
+function Flag({ nation, style }) {
+  if (!nation) return null;
+  return <Text style={[styles.flag, style]}>{flagFor(nation)}</Text>;
+}
+
 function TextField({ label, optional, value, onChangeText, placeholder, maxLength, autoFocus }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -161,24 +184,20 @@ function TextField({ label, optional, value, onChangeText, placeholder, maxLengt
   );
 }
 
-// Dropdown select. `searchable` adds a filter; `leading` renders a prefix per row.
 function SelectField({ label, optional, value, options, onSelect, placeholder, searchable, leading }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [q, setQ] = useState('');
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
-  }, [query, options]);
+    const s = q.trim().toLowerCase();
+    return s ? options.filter((o) => o.toLowerCase().includes(s)) : options;
+  }, [q, options]);
   return (
     <View style={styles.field}>
       <View style={styles.labelRow}>
         <Text style={styles.label}>{label}</Text>
         {optional && <Text style={styles.optional}>Optional</Text>}
       </View>
-      <Pressable
-        style={[styles.input, styles.selectRow, open && styles.inputFocus]}
-        onPress={() => setOpen((o) => !o)}
-      >
+      <Pressable style={[styles.input, styles.selectRow, open && styles.inputFocus]} onPress={() => setOpen((o) => !o)}>
         <Text style={value ? styles.inputText : styles.placeholder} numberOfLines={1}>
           {value ? `${leading ? leading(value) + '  ' : ''}${value}` : placeholder}
         </Text>
@@ -189,8 +208,8 @@ function SelectField({ label, optional, value, options, onSelect, placeholder, s
           {searchable && (
             <TextInput
               style={styles.search}
-              value={query}
-              onChangeText={setQuery}
+              value={q}
+              onChangeText={setQ}
               placeholder="Search"
               placeholderTextColor={C.faint}
               autoFocus
@@ -203,7 +222,7 @@ function SelectField({ label, optional, value, options, onSelect, placeholder, s
                 style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
                 onPress={() => {
                   onSelect(opt);
-                  setQuery('');
+                  setQ('');
                   setOpen(false);
                 }}
               >
@@ -221,7 +240,18 @@ function SelectField({ label, optional, value, options, onSelect, placeholder, s
   );
 }
 
-// Small live count with a pulsing status dot.
+function EnvBadge() {
+  if (!env.isDev && !env.isLocalBuild) return null;
+  const danger = env.isLocalBuild && !env.isDev;
+  return (
+    <View style={[styles.envBadge, danger && styles.envBadgeDanger]} pointerEvents="none">
+      <View style={[styles.envDot, { backgroundColor: danger ? C.warn : C.accent }]} />
+      <Text style={styles.envText}>{danger ? 'LOCAL · writing to production data' : 'DEV · sandbox data'}</Text>
+    </View>
+  );
+}
+
+// Live count with a pulsing status dot.
 function LiveCount() {
   const [count, setCount] = useState(null);
   const pulse = useRef(new Animated.Value(0.4)).current;
@@ -246,47 +276,29 @@ function LiveCount() {
   );
 }
 
-// Build / environment indicator. Renders only off the real production deploy.
-function EnvBadge() {
-  if (!env.isDev && !env.isLocalBuild) return null;
-  const danger = env.isLocalBuild && !env.isDev;
-  return (
-    <View style={[styles.envBadge, danger && styles.envBadgeDanger]} pointerEvents="none">
-      <View style={[styles.envDot, { backgroundColor: danger ? C.warn : C.accent }]} />
-      <Text style={styles.envText}>{danger ? 'LOCAL · writing to production data' : 'DEV · sandbox data'}</Text>
-    </View>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// App
+// Join screen — signup form + welcome result
 // ---------------------------------------------------------------------------
-export default function App() {
+function JoinScreen({ onJoined, onExplore }) {
   const [name, setName] = useState('');
   const [country, setCountry] = useState('');
   const [team, setTeam] = useState('');
   const [lookingType, setLookingType] = useState('');
   const [lookingGoal, setLookingGoal] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [position, setPosition] = useState(null);
+  const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
 
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(entrance, {
-      toValue: 1,
-      duration: 500,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
+    Animated.timing(entrance, { toValue: 1, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
   }, []);
-
   useEffect(() => {
-    if (position === null) return;
-    buzz([50, 30, 110]); // welcome buzz on joining
+    if (!result) return;
+    buzz([50, 30, 110]);
     playWinSound();
-  }, [position]);
+  }, [result]);
 
   const canSubmit = !!name.trim() && !!lookingType && !submitting;
 
@@ -296,8 +308,9 @@ export default function App() {
     setSubmitting(true);
     setError('');
     try {
-      const pos = await submitSignup({ name, country, team, lookingType, lookingGoal });
-      setPosition(pos);
+      const r = await submitSignup({ name, country, team, lookingType, lookingGoal });
+      setResult(r);
+      onJoined({ ...r, country, team });
     } catch (e) {
       setError('Something went wrong. Please try again.');
       setSubmitting(false);
@@ -305,37 +318,35 @@ export default function App() {
   };
 
   const openWhatsApp = () => Linking.openURL(WHATSAPP_GROUP_URL);
-
   const onShare = async () => {
-    const status = await shareRank({ name, position });
+    const status = await shareRank({ name, position: result?.position });
     if (status === 'copied') setToast('Link copied');
     else if (status === 'shared') setToast('Shared');
     else if (status === 'unsupported') setToast('Sharing unavailable on this device');
     if (status !== 'cancelled') setTimeout(() => setToast(''), 2400);
   };
 
-  // ---- Result ----
-  if (position !== null) {
+  if (result) {
     const meta = [country, team && `${team} supporter`].filter(Boolean).join('  ·  ');
     return (
       <View style={[styles.screen, styles.heroScreen]}>
-        <EnvBadge />
         <Confetti />
         <View style={styles.heroBody}>
           <Text style={styles.heroEyebrow}>YOU'RE IN · FAN</Text>
-          <AnimatedCount value={position} style={styles.heroNumber} />
+          <AnimatedCount value={result.position} style={styles.heroNumber} />
           <Text style={styles.heroName}>{name.trim()}</Text>
           {meta ? <Text style={styles.heroMeta}>{meta}</Text> : null}
           <Text style={styles.heroCopy}>
-            Welcome to the FanFest community. Jump into the group chat to meet fans
-            {country ? ` repping ${country}` : ''} and talk all things World Cup.
+            Welcome to the FanFest community. Meet other fans, find a watch party, and jump into the group chat.
           </Text>
-
           <PressableScale style={styles.primaryOnHero} onPress={openWhatsApp}>
             <Text style={styles.primaryOnHeroText}>Join the community on WhatsApp</Text>
           </PressableScale>
-          <PressableScale style={styles.secondaryOnHero} onPress={onShare}>
-            <Text style={styles.secondaryOnHeroText}>Invite friends</Text>
+          <PressableScale style={styles.secondaryOnHero} onPress={onExplore}>
+            <Text style={styles.secondaryOnHeroText}>Explore the fans</Text>
+          </PressableScale>
+          <PressableScale style={styles.ghostOnHero} onPress={onShare}>
+            <Text style={styles.ghostOnHeroText}>Invite friends</Text>
           </PressableScale>
           {toast ? <Text style={styles.toast}>{toast}</Text> : null}
         </View>
@@ -344,22 +355,14 @@ export default function App() {
     );
   }
 
-  // ---- Signup ----
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <EnvBadge />
       <Animated.View
-        style={{
-          opacity: entrance,
-          transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
-        }}
+        style={{ opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}
       >
-        <Text style={styles.eyebrow}>FIFA WORLD CUP 2026</Text>
-        <Text style={styles.title}>FanFest</Text>
+        <Text style={styles.eyebrow}>WORLD CUP 2026</Text>
+        <Text style={styles.title}>FanFest Dallas/Arlington</Text>
         <Text style={styles.subtitle}>
           The fan community for the World Cup. Sign up to connect with fans from your country and team —
           then jump into the group chat.
@@ -369,51 +372,14 @@ export default function App() {
 
         <View style={styles.form}>
           <TextField label="Full name" value={name} onChangeText={setName} placeholder="Jordan Smith" maxLength={100} />
-
-          <SelectField
-            label="Country"
-            optional
-            value={country}
-            options={NATIONS}
-            onSelect={setCountry}
-            placeholder="Select your country"
-            searchable
-            leading={flagFor}
-          />
-          <SelectField
-            label="Team you support"
-            optional
-            value={team}
-            options={NATIONS}
-            onSelect={setTeam}
-            placeholder="Select a team"
-            searchable
-            leading={flagFor}
-          />
-
-          <SelectField
-            label="I'm looking to"
-            value={lookingType}
-            options={LOOKING_TYPES}
-            onSelect={setLookingType}
-            placeholder="Choose one"
-          />
-          <TextField
-            label="Your goal"
-            optional
-            value={lookingGoal}
-            onChangeText={setLookingGoal}
-            placeholder="Find Japan fans for the final"
-            maxLength={280}
-          />
+          <SelectField label="Country" optional value={country} options={NATIONS} onSelect={setCountry} placeholder="Select your country" searchable leading={flagFor} />
+          <SelectField label="Team you support" optional value={team} options={NATIONS} onSelect={setTeam} placeholder="Select a team" searchable leading={flagFor} />
+          <SelectField label="I'm looking to" value={lookingType} options={LOOKING_TYPES} onSelect={setLookingType} placeholder="Choose one" />
+          <TextField label="Your goal" optional value={lookingGoal} onChangeText={setLookingGoal} placeholder="Find Japan fans for the final" maxLength={280} />
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <PressableScale
-            style={[styles.primary, !canSubmit && styles.primaryDisabled]}
-            onPress={onSubmit}
-            disabled={!canSubmit}
-          >
+          <PressableScale style={[styles.primary, !canSubmit && styles.primaryDisabled]} onPress={onSubmit} disabled={!canSubmit}>
             <Text style={styles.primaryText}>{submitting ? 'Joining…' : 'Join FanFest'}</Text>
           </PressableScale>
           <Text style={styles.fineprint}>No spam — just fans.</Text>
@@ -424,27 +390,204 @@ export default function App() {
   );
 }
 
-const SHADOW = {
-  shadowColor: '#000',
-  shadowOpacity: 0.06,
-  shadowRadius: 12,
-  shadowOffset: { width: 0, height: 4 },
-};
+// ---------------------------------------------------------------------------
+// Fans screen — public directory + intent filter
+// ---------------------------------------------------------------------------
+function Chip({ label, active, onPress }) {
+  return (
+    <PressableScale style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </PressableScale>
+  );
+}
+
+function FansScreen({ me }) {
+  const [fans, setFans] = useState(null);
+  const [filter, setFilter] = useState('Everyone');
+  useEffect(() => subscribeToFans(setFans), []);
+
+  const topCountries = useMemo(() => {
+    if (!fans) return [];
+    const counts = {};
+    for (const f of fans) if (f.country) counts[f.country] = (counts[f.country] || 0) + 1;
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  }, [fans]);
+
+  const filtered = useMemo(() => {
+    if (!fans) return [];
+    return filter === 'Everyone' ? fans : fans.filter((f) => f.lookingType === filter);
+  }, [fans, filter]);
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <EnvBadge />
+      <Text style={styles.eyebrow}>THE COMMUNITY</Text>
+      <Text style={styles.title}>The Fans</Text>
+      <Text style={styles.subtitle}>
+        {fans == null ? 'Loading the community…' : `${fans.length.toLocaleString()} ${fans.length === 1 ? 'fan' : 'fans'} here so far. Find your people.`}
+      </Text>
+
+      {topCountries.length > 0 && (
+        <View style={styles.countryRow}>
+          {topCountries.map(([nation, n]) => (
+            <View key={nation} style={styles.countryStat}>
+              <Flag nation={nation} style={styles.countryFlag} />
+              <Text style={styles.countryCount}>{n}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chipRow}>
+        {['Everyone', ...LOOKING_TYPES].map((t) => (
+          <Chip key={t} label={t} active={filter === t} onPress={() => setFilter(t)} />
+        ))}
+      </ScrollView>
+
+      <View style={styles.fanList}>
+        {fans == null ? (
+          <Text style={styles.muted}>Loading…</Text>
+        ) : filtered.length === 0 ? (
+          <Text style={styles.muted}>No fans here yet — be the first.</Text>
+        ) : (
+          filtered.map((f) => {
+            const isMe = me && f.position === me.position && f.firstName === me.firstName;
+            return (
+              <View key={f.id} style={[styles.fanRow, isMe && styles.fanRowMe]}>
+                <Flag nation={f.country} style={styles.fanFlag} />
+                <View style={styles.fanInfo}>
+                  <Text style={styles.fanName}>
+                    {f.firstName}
+                    {isMe ? '  (you)' : ''}
+                  </Text>
+                  <Text style={styles.fanMeta} numberOfLines={1}>
+                    {f.team ? `${flagFor(f.team)} ${f.team} · ` : ''}
+                    {f.lookingType ? f.lookingType.toLowerCase() : ''}
+                  </Text>
+                </View>
+                <Text style={styles.fanNum}>#{f.position}</Text>
+              </View>
+            );
+          })
+        )}
+      </View>
+      <StatusBar style="dark" />
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Matches screen — schedule (with Tubi) + watch-party venues
+// ---------------------------------------------------------------------------
+function MatchesScreen() {
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <EnvBadge />
+      <Text style={styles.eyebrow}>MATCHDAY</Text>
+      <Text style={styles.title}>Matches</Text>
+      <Text style={styles.subtitle}>The schedule near Dallas/Arlington. Every match streams free on Tubi.</Text>
+
+      <Text style={styles.sectionTitle}>Schedule</Text>
+      {FIXTURES.map((m) => (
+        <View key={m.id} style={styles.matchCard}>
+          <View style={styles.matchTop}>
+            <Text style={styles.matchStage}>{m.stage}</Text>
+            <Text style={styles.matchWhen}>{m.date} · {m.time}</Text>
+          </View>
+          <View style={styles.matchTeams}>
+            <Text style={styles.matchTeam} numberOfLines={1}><Flag nation={m.home} /> {m.home}</Text>
+            <Text style={styles.matchVs}>vs</Text>
+            <Text style={[styles.matchTeam, styles.matchTeamRight]} numberOfLines={1}>{m.away} <Flag nation={m.away} /></Text>
+          </View>
+          <Text style={styles.matchVenue}>{m.venue} · {m.city}</Text>
+          <PressableScale style={styles.tubiBtn} onPress={() => Linking.openURL(TUBI_URL)}>
+            <Text style={styles.tubiBtnText}>Watch free on Tubi</Text>
+          </PressableScale>
+        </View>
+      ))}
+
+      <Text style={[styles.sectionTitle, { marginTop: 28 }]}>Where to watch</Text>
+      {VENUES.map((v) => (
+        <View key={v.id} style={styles.venueCard}>
+          <View style={styles.venueHead}>
+            <Text style={styles.venueName}>{v.name}</Text>
+            {v.perk ? (
+              <View style={styles.perk}>
+                <Text style={styles.perkText}>{v.perk}</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.venueArea}>{v.area}</Text>
+          <Text style={styles.venueBlurb}>{v.blurb}</Text>
+          <View style={styles.venueActions}>
+            <PressableScale style={styles.venueBtn} onPress={() => openMaps(v.mapsQuery)}>
+              <Text style={styles.venueBtnText}>Directions</Text>
+            </PressableScale>
+            <PressableScale style={[styles.venueBtn, styles.venueBtnAlt]} onPress={() => Linking.openURL(WHATSAPP_GROUP_URL)}>
+              <Text style={[styles.venueBtnText, styles.venueBtnTextAlt]}>Join chat</Text>
+            </PressableScale>
+          </View>
+        </View>
+      ))}
+      <StatusBar style="dark" />
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab bar + shell
+// ---------------------------------------------------------------------------
+const TABS = [
+  { key: 'join', label: 'Join' },
+  { key: 'fans', label: 'Fans' },
+  { key: 'matches', label: 'Matches' },
+];
+
+function TabBar({ tab, setTab }) {
+  return (
+    <View style={styles.tabBar}>
+      {TABS.map((t) => {
+        const active = tab === t.key;
+        return (
+          <Pressable key={t.key} style={styles.tabItem} onPress={() => setTab(t.key)}>
+            <View style={[styles.tabDot, active && styles.tabDotActive]} />
+            <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{t.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export default function App() {
+  const [tab, setTab] = useState('join');
+  const [me, setMe] = useState(null);
+  return (
+    <View style={styles.app}>
+      <View style={styles.appBody}>
+        {tab === 'join' && <JoinScreen onJoined={setMe} onExplore={() => setTab('fans')} />}
+        {tab === 'fans' && <FansScreen me={me} />}
+        {tab === 'matches' && <MatchesScreen />}
+      </View>
+      <TabBar tab={tab} setTab={setTab} />
+    </View>
+  );
+}
+
+const SHADOW = { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } };
 
 const styles = StyleSheet.create({
+  app: { flex: 1, backgroundColor: C.paper },
+  appBody: { flex: 1 },
   screen: { flex: 1, backgroundColor: C.paper },
-  content: {
-    padding: 24,
-    paddingTop: Platform.OS === 'web' ? 56 : 72,
-    paddingBottom: 64,
-    maxWidth: 520,
-    width: '100%',
-    alignSelf: 'center',
-  },
+  content: { padding: 24, paddingTop: Platform.OS === 'web' ? 56 : 72, paddingBottom: 96, maxWidth: 520, width: '100%', alignSelf: 'center' },
 
   eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5, color: C.accent },
-  title: { fontSize: 40, fontWeight: '800', color: C.ink, letterSpacing: -1.2, marginTop: 8 },
+  title: { fontSize: 36, fontWeight: '800', color: C.ink, letterSpacing: -1.2, marginTop: 8 },
   subtitle: { fontSize: 15.5, color: C.sub, marginTop: 10, lineHeight: 23 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: C.ink, marginTop: 24, marginBottom: 12, letterSpacing: -0.3 },
+  muted: { color: C.faint, fontSize: 14, paddingVertical: 16 },
+  flag: { ...FLAG_FONT },
 
   live: { flexDirection: 'row', alignItems: 'center', marginTop: 18 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.accent, marginRight: 8 },
@@ -455,50 +598,22 @@ const styles = StyleSheet.create({
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 },
   label: { fontSize: 13.5, fontWeight: '600', color: C.ink },
   optional: { fontSize: 12, color: C.faint, fontWeight: '500' },
-
-  input: {
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 16,
-    color: C.ink,
-    backgroundColor: C.paper,
-  },
+  input: { borderWidth: 1, borderColor: C.line, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, color: C.ink, backgroundColor: C.paper },
   inputFocus: { borderColor: C.lineFocus },
-  inputText: { fontSize: 16, color: C.ink },
+  inputText: { fontSize: 16, color: C.ink, ...FLAG_FONT },
   placeholder: { fontSize: 16, color: C.faint },
   selectRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   chevron: { fontSize: 18, color: C.faint, marginLeft: 8, marginTop: -4 },
   chevronOpen: { color: C.ink },
-
-  dropdown: {
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 10,
-    marginTop: 6,
-    maxHeight: 264,
-    overflow: 'hidden',
-    backgroundColor: C.paper,
-    ...SHADOW,
-  },
-  search: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 15,
-    color: C.ink,
-    borderBottomWidth: 1,
-    borderBottomColor: C.line,
-  },
+  dropdown: { borderWidth: 1, borderColor: C.line, borderRadius: 10, marginTop: 6, maxHeight: 264, overflow: 'hidden', backgroundColor: C.paper, ...SHADOW },
+  search: { paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: C.ink, borderBottomWidth: 1, borderBottomColor: C.line },
   dropdownScroll: { maxHeight: 216 },
   option: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   optionPressed: { backgroundColor: '#F9FAFB' },
-  optionText: { fontSize: 15.5, color: C.ink },
+  optionText: { fontSize: 15.5, color: C.ink, ...FLAG_FONT },
   noMatch: { padding: 16, color: C.faint, textAlign: 'center', fontSize: 14 },
 
   error: { color: C.warn, fontSize: 14, fontWeight: '500', marginBottom: 14 },
-
   primary: { backgroundColor: C.ink, borderRadius: 10, paddingVertical: 16, alignItems: 'center', marginTop: 6 },
   primaryDisabled: { backgroundColor: '#D1D5DB' },
   primaryText: { color: '#fff', fontSize: 16, fontWeight: '700' },
@@ -506,38 +621,78 @@ const styles = StyleSheet.create({
 
   // Hero / result
   heroScreen: { backgroundColor: C.hero },
-  heroBody: { flex: 1, justifyContent: 'center', paddingHorizontal: 28, maxWidth: 520, width: '100%', alignSelf: 'center' },
+  heroBody: { flex: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 40, maxWidth: 520, width: '100%', alignSelf: 'center' },
   heroEyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5, color: C.accent },
-  heroNumber: { fontSize: 84, fontWeight: '800', color: C.heroText, letterSpacing: -2, marginTop: 8 },
+  heroNumber: { fontSize: 80, fontWeight: '800', color: C.heroText, letterSpacing: -2, marginTop: 8 },
   heroName: { fontSize: 22, fontWeight: '700', color: C.heroText, marginTop: 4 },
   heroMeta: { fontSize: 14, color: C.heroSub, marginTop: 6 },
   heroCopy: { fontSize: 16, color: C.heroSub, marginTop: 18, lineHeight: 24 },
-
   primaryOnHero: { backgroundColor: C.whatsapp, borderRadius: 10, paddingVertical: 16, alignItems: 'center', marginTop: 28 },
   primaryOnHeroText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  secondaryOnHero: {
-    borderRadius: 10,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: C.heroLine,
-  },
+  secondaryOnHero: { borderRadius: 10, paddingVertical: 15, alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: C.heroLine },
   secondaryOnHeroText: { color: C.heroText, fontSize: 15, fontWeight: '600' },
-  toast: { marginTop: 16, color: '#86EFAC', fontWeight: '600', fontSize: 13.5, textAlign: 'center' },
+  ghostOnHero: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
+  ghostOnHeroText: { color: C.heroSub, fontSize: 14, fontWeight: '600' },
+  toast: { marginTop: 14, color: '#86EFAC', fontWeight: '600', fontSize: 13.5, textAlign: 'center' },
 
   // Env badge
-  envBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
+  envBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', backgroundColor: '#F3F4F6', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, marginBottom: 16 },
   envBadgeDanger: { backgroundColor: '#FEF2F2' },
   envDot: { width: 6, height: 6, borderRadius: 3, marginRight: 7 },
   envText: { fontSize: 11.5, fontWeight: '700', color: C.sub, letterSpacing: 0.3 },
+
+  // Fans
+  countryRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  countryStat: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.accentSoft, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
+  countryFlag: { fontSize: 18, marginRight: 6 },
+  countryCount: { fontSize: 14, fontWeight: '800', color: C.accent },
+  chipScroll: { marginTop: 18, marginHorizontal: -24 },
+  chipRow: { paddingHorizontal: 24, gap: 8 },
+  chip: { borderWidth: 1, borderColor: C.line, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
+  chipActive: { backgroundColor: C.ink, borderColor: C.ink },
+  chipText: { fontSize: 13, fontWeight: '600', color: C.sub },
+  chipTextActive: { color: '#fff' },
+  fanList: { marginTop: 18 },
+  fanRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  fanRowMe: { backgroundColor: C.accentSoft, borderRadius: 10, paddingHorizontal: 10, marginHorizontal: -10, borderBottomColor: 'transparent' },
+  fanFlag: { fontSize: 26, marginRight: 12 },
+  fanInfo: { flex: 1 },
+  fanName: { fontSize: 15.5, fontWeight: '700', color: C.ink },
+  fanMeta: { fontSize: 13, color: C.sub, marginTop: 2, ...FLAG_FONT },
+  fanNum: { fontSize: 13, fontWeight: '700', color: C.faint, marginLeft: 10 },
+
+  // Matches
+  matchCard: { borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 16, marginBottom: 12 },
+  matchTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  matchStage: { fontSize: 11.5, fontWeight: '800', letterSpacing: 0.5, color: C.accent, textTransform: 'uppercase' },
+  matchWhen: { fontSize: 13, fontWeight: '600', color: C.sub },
+  matchTeams: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
+  matchTeam: { flex: 1, fontSize: 16, fontWeight: '700', color: C.ink, ...FLAG_FONT },
+  matchTeamRight: { textAlign: 'right' },
+  matchVs: { fontSize: 12, color: C.faint, fontWeight: '600', marginHorizontal: 10 },
+  matchVenue: { fontSize: 13, color: C.sub, marginTop: 10 },
+  tubiBtn: { backgroundColor: C.accentSoft, borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 14 },
+  tubiBtnText: { color: C.accent, fontSize: 14, fontWeight: '800' },
+
+  // Venues
+  venueCard: { borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 16, marginBottom: 12 },
+  venueHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  venueName: { flex: 1, fontSize: 17, fontWeight: '800', color: C.ink },
+  perk: { backgroundColor: C.accentSoft, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, marginLeft: 8 },
+  perkText: { fontSize: 11, fontWeight: '700', color: C.accent },
+  venueArea: { fontSize: 13, color: C.sub, marginTop: 3, fontWeight: '600' },
+  venueBlurb: { fontSize: 14, color: C.sub, marginTop: 8, lineHeight: 20 },
+  venueActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  venueBtn: { flex: 1, backgroundColor: C.ink, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  venueBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  venueBtnAlt: { backgroundColor: C.paper, borderWidth: 1, borderColor: C.line },
+  venueBtnTextAlt: { color: C.ink },
+
+  // Tab bar
+  tabBar: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.paper, paddingBottom: Platform.OS === 'web' ? 8 : 24, paddingTop: 8 },
+  tabItem: { flex: 1, alignItems: 'center', paddingVertical: 6 },
+  tabDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent', marginBottom: 5 },
+  tabDotActive: { backgroundColor: C.accent },
+  tabLabel: { fontSize: 12.5, fontWeight: '700', color: C.faint },
+  tabLabelActive: { color: C.ink },
 });

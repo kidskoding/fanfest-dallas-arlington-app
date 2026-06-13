@@ -1,4 +1,4 @@
-// FIFA World Cup 2026 — 48 participating nations
+// World Cup 2026 — 48 participating nations
 // Sorted A–Z. Real qualified nations preferred; placeholder labels used only
 // for intercontinental playoff spots that remained unresolved as of mid-2026.
 
