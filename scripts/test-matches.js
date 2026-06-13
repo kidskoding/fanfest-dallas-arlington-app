@@ -1,5 +1,5 @@
 const assert = require('node:assert');
-const { mapEspnEvents, ymd, groupByDay, dayLabel } = require('../src/matches.js');
+const { mapEspnEvents, ymd, groupByDay, dayLabel, timeLabel } = require('../src/matches.js');
 
 // Trimmed ESPN scoreboard payload: one in-progress + one scheduled match.
 const SAMPLE = {
@@ -77,5 +77,9 @@ assert.strictEqual(twoDays.length, 2, 'distinct days split into separate groups'
 assert.strictEqual(dayLabel('2026-06-13', '2026-06-13'), 'Today');
 assert.strictEqual(dayLabel('2026-06-14', '2026-06-13'), 'Tomorrow');
 assert.strictEqual(dayLabel('2026-06-20', '2026-06-13'), 'Sat, Jun 20');
+
+// timeLabel — kickoff time in a forced zone (18:00Z = 1:00 PM Central).
+assert.strictEqual(timeLabel('2026-06-13T18:00:00Z', 'America/Chicago'), '1:00 PM');
+assert.strictEqual(timeLabel('2026-06-14T00:30:00Z', 'America/Chicago'), '7:30 PM');
 
 console.log('PASS test-matches');
