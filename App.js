@@ -19,6 +19,18 @@ import { isWinner, WINNER_CUTOFF } from './src/position';
 import { submitSignup, subscribeToCount } from './src/signup';
 import { shareRank } from './src/share';
 import { buzz, playWinSound } from './src/celebrate';
+import env from './src/env';
+
+// Fixed banner shown only in dev so a sandbox session can never be mistaken
+// for the live event app.
+function DevBadge() {
+  if (!env.isDev) return null;
+  return (
+    <View style={styles.devBadge} pointerEvents="none">
+      <Text style={styles.devBadgeText}>🛠 DEV MODE · writing to signups_dev (not event data)</Text>
+    </View>
+  );
+}
 
 // Single master WhatsApp group invite, configured via EXPO_PUBLIC_WHATSAPP_GROUP_URL
 // in .env (read at build time). Fallback is a dead placeholder.
@@ -270,6 +282,7 @@ export default function App() {
     const spotsLeft = Math.max(0, WINNER_CUTOFF - position);
     return (
       <View style={[styles.container, styles.resultBg]}>
+        <DevBadge />
         {won && <Confetti extra={flagFor(team)} />}
         <View style={styles.resultBox}>
           <Text style={styles.kicker}>{won ? "YOU'RE IN. AND YOU WON. 🏆" : "YOU'RE IN. 🎟️"}</Text>
@@ -308,6 +321,7 @@ export default function App() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
+      <DevBadge />
       <Animated.View
         style={{
           opacity: entrance,
@@ -371,6 +385,8 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 20, paddingTop: Platform.OS === 'web' ? 40 : 60, paddingBottom: 60 },
+  devBadge: { backgroundColor: '#7C3AED', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 14 },
+  devBadgeText: { color: '#fff', fontWeight: '800', fontSize: 12, textAlign: 'center' },
   title: { fontSize: 34, fontWeight: '900', color: '#111', letterSpacing: -0.5 },
   subtitle: { fontSize: 15, color: '#555', marginTop: 6, marginBottom: 16, lineHeight: 21 },
 
