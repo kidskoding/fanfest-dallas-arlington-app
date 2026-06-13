@@ -641,12 +641,16 @@ function MatchesScreen() {
           <Text style={styles.venueArea}>{v.area}</Text>
           <Text style={styles.venueBlurb}>{v.blurb}</Text>
           <View style={styles.venueActions}>
-            <PressableScale style={styles.venueBtn} onPress={() => openMaps(v.mapsQuery)}>
-              <Text style={styles.venueBtnText}>Directions</Text>
-            </PressableScale>
-            <PressableScale style={[styles.venueBtn, styles.venueBtnAlt]} onPress={() => Linking.openURL(WHATSAPP_GROUP_URL)}>
-              <Text style={[styles.venueBtnText, styles.venueBtnTextAlt]}>Join chat</Text>
-            </PressableScale>
+            <View style={styles.venueBtnWrap}>
+              <PressableScale style={styles.venueBtn} onPress={() => openMaps(v.mapsQuery)}>
+                <Text style={styles.venueBtnText}>Directions</Text>
+              </PressableScale>
+            </View>
+            <View style={styles.venueBtnWrap}>
+              <PressableScale style={[styles.venueBtn, styles.venueBtnAlt]} onPress={() => Linking.openURL(WHATSAPP_GROUP_URL)}>
+                <Text style={[styles.venueBtnText, styles.venueBtnTextAlt]}>Join chat</Text>
+              </PressableScale>
+            </View>
           </View>
         </View>
       ))}
@@ -822,9 +826,10 @@ const styles = StyleSheet.create({
   perkText: { fontSize: 11, fontWeight: '700', color: C.accent },
   venueArea: { fontSize: 13, color: C.sub, marginTop: 3, fontWeight: '600' },
   venueBlurb: { fontSize: 14, color: C.sub, marginTop: 8, lineHeight: 20 },
-  venueActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  venueBtn: { flex: 1, backgroundColor: C.ink, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  venueBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  venueActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  venueBtnWrap: { flex: 1 },
+  venueBtn: { backgroundColor: C.ink, borderRadius: 12, paddingVertical: 15, alignItems: 'center', justifyContent: 'center' },
+  venueBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   venueBtnAlt: { backgroundColor: C.paper, borderWidth: 1, borderColor: C.line },
   venueBtnTextAlt: { color: C.ink },
 
