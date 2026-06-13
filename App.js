@@ -1,8 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Easing,
+  Image,
   Linking,
   Platform,
   Pressable,
@@ -19,6 +21,7 @@ import { flagFor } from './src/flags';
 import { LOOKING_TYPES } from './src/lookingTypes';
 import { FIXTURES } from './src/fixtures';
 import { VENUES } from './src/venues';
+import { fetchUpcoming, groupByDay, dayLabel } from './src/matches';
 import { submitSignup, subscribeToCount, subscribeToFans } from './src/signup';
 import { shareRank } from './src/share';
 import { buzz, playWinSound } from './src/celebrate';
@@ -31,9 +34,11 @@ const WHATSAPP_GROUP_URL =
   process.env.EXPO_PUBLIC_WHATSAPP_GROUP_URL ||
   'https://chat.whatsapp.com/REPLACE_WITH_REAL_INVITE';
 
-// Tubi streams the World Cup matches for free. Per-match deep links can be set
-// on each fixture later; for now every match points to Tubi.
-const TUBI_URL = process.env.EXPO_PUBLIC_TUBI_URL || 'https://tubi.tv';
+// Tubi streams the World Cup for free. Points at the tournament series page;
+// override per-deploy with EXPO_PUBLIC_TUBI_URL if a better deep link appears.
+const TUBI_URL =
+  process.env.EXPO_PUBLIC_TUBI_URL ||
+  'https://tubitv.com/series/300021054/fifa-world-cup-2026';
 
 // Display-only social-proof seed added to the live "fans joined" ticker. Does
 // not touch the real signup counter. Only applied in prod.
@@ -479,32 +484,116 @@ function FansScreen({ me }) {
 // ---------------------------------------------------------------------------
 // Matches screen — schedule (with Tubi) + watch-party venues
 // ---------------------------------------------------------------------------
+// One team's crest + name. `align="right"` mirrors it for the away side.
+function TeamColumn({ team, align }) {
+  return (
+    <View style={styles.teamCol}>
+      {team.logo ? (
+        <Image source={{ uri: team.logo }} style={styles.crest} resizeMode="contain" />
+      ) : (
+        <View style={[styles.crest, styles.crestEmpty]} />
+      )}
+      <Text style={[styles.teamColName, align === 'right' && { textAlign: 'right' }]} numberOfLines={1}>
+        {team.name}
+      </Text>
+    </View>
+  );
+}
+
+// Live/scheduled match card driven by the ESPN feed.
+function LiveMatchCard({ m }) {
+  const scored = m.state !== 'pre';
+  return (
+    <View style={styles.matchCard}>
+      <View style={styles.matchTop}>
+        <Text style={styles.matchStage} numberOfLines={1}>{m.stage || 'World Cup'}</Text>
+        {m.live ? (
+          <View style={styles.livePill}>
+            <View style={styles.livePillDot} />
+            <Text style={styles.livePillText}>LIVE {m.clock}</Text>
+          </View>
+        ) : (
+          <Text style={styles.matchWhen}>{m.state === 'post' ? 'Full time' : m.detail}</Text>
+        )}
+      </View>
+      <View style={styles.scoreRow}>
+        <TeamColumn team={m.home} />
+        <Text style={styles.scoreCenter}>
+          {scored ? `${m.home.score ?? 0}–${m.away.score ?? 0}` : 'vs'}
+        </Text>
+        <TeamColumn team={m.away} align="right" />
+      </View>
+      {m.venue ? <Text style={styles.matchVenue}>{m.venue}{m.city ? ` · ${m.city}` : ''}</Text> : null}
+      <PressableScale style={styles.tubiBtn} onPress={() => Linking.openURL(TUBI_URL)}>
+        <Text style={styles.tubiBtnText}>Watch free on Tubi</Text>
+      </PressableScale>
+    </View>
+  );
+}
+
+// Fallback card from the hardcoded sample schedule (used if the feed is down).
+function FixtureCard({ m }) {
+  return (
+    <View style={styles.matchCard}>
+      <View style={styles.matchTop}>
+        <Text style={styles.matchStage}>{m.stage}</Text>
+        <Text style={styles.matchWhen}>{m.date} · {m.time}</Text>
+      </View>
+      <View style={styles.matchTeams}>
+        <Text style={styles.matchTeam} numberOfLines={1}><Flag nation={m.home} /> {m.home}</Text>
+        <Text style={styles.matchVs}>vs</Text>
+        <Text style={[styles.matchTeam, styles.matchTeamRight]} numberOfLines={1}>{m.away} <Flag nation={m.away} /></Text>
+      </View>
+      <Text style={styles.matchVenue}>{m.venue} · {m.city}</Text>
+      <PressableScale style={styles.tubiBtn} onPress={() => Linking.openURL(TUBI_URL)}>
+        <Text style={styles.tubiBtnText}>Watch free on Tubi</Text>
+      </PressableScale>
+    </View>
+  );
+}
+
 function MatchesScreen() {
+  const [matches, setMatches] = useState(null); // null = loading
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetchUpcoming(6) // today + next 6 days
+      .then((list) => alive && setMatches(list))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const list = matches || [];
+  const showFallback = failed || (matches !== null && list.length === 0);
+  const groups = groupByDay(list);
+  const todayKey = new Date().toISOString().slice(0, 10);
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <EnvBadge />
       <Text style={styles.eyebrow}>MATCHDAY</Text>
       <Text style={styles.title}>Matches</Text>
-      <Text style={styles.subtitle}>The schedule near Dallas/Arlington. Every match streams free on Tubi.</Text>
+      <Text style={styles.subtitle}>Live scores and the week ahead. Every match streams free on Tubi.</Text>
 
-      <Text style={styles.sectionTitle}>Schedule</Text>
-      {FIXTURES.map((m) => (
-        <View key={m.id} style={styles.matchCard}>
-          <View style={styles.matchTop}>
-            <Text style={styles.matchStage}>{m.stage}</Text>
-            <Text style={styles.matchWhen}>{m.date} · {m.time}</Text>
+      <Text style={styles.sectionTitle}>{showFallback ? 'Schedule' : 'This week'}</Text>
+      {matches === null && !failed ? (
+        <ActivityIndicator color={C.accent} style={{ marginVertical: 24 }} />
+      ) : showFallback ? (
+        <>
+          <Text style={styles.muted}>Live scores unavailable right now — showing the schedule.</Text>
+          {FIXTURES.map((m) => <FixtureCard key={m.id} m={m} />)}
+        </>
+      ) : (
+        groups.map((g) => (
+          <View key={g.day}>
+            <Text style={styles.daySubhead}>{dayLabel(g.day, todayKey)}</Text>
+            {g.matches.map((m) => <LiveMatchCard key={m.id} m={m} />)}
           </View>
-          <View style={styles.matchTeams}>
-            <Text style={styles.matchTeam} numberOfLines={1}><Flag nation={m.home} /> {m.home}</Text>
-            <Text style={styles.matchVs}>vs</Text>
-            <Text style={[styles.matchTeam, styles.matchTeamRight]} numberOfLines={1}>{m.away} <Flag nation={m.away} /></Text>
-          </View>
-          <Text style={styles.matchVenue}>{m.venue} · {m.city}</Text>
-          <PressableScale style={styles.tubiBtn} onPress={() => Linking.openURL(TUBI_URL)}>
-            <Text style={styles.tubiBtnText}>Watch free on Tubi</Text>
-          </PressableScale>
-        </View>
-      ))}
+        ))
+      )}
 
       <Text style={[styles.sectionTitle, { marginTop: 28 }]}>Where to watch</Text>
       {VENUES.map((v) => (
@@ -673,6 +762,18 @@ const styles = StyleSheet.create({
   matchVenue: { fontSize: 13, color: C.sub, marginTop: 10 },
   tubiBtn: { backgroundColor: C.accentSoft, borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 14 },
   tubiBtnText: { color: C.accent, fontSize: 14, fontWeight: '800' },
+
+  // Live match card (ESPN feed)
+  daySubhead: { fontSize: 13, fontWeight: '800', color: C.sub, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 14, marginBottom: 8 },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
+  teamCol: { flex: 1, alignItems: 'center' },
+  crest: { width: 34, height: 34, marginBottom: 6 },
+  crestEmpty: { borderRadius: 17, backgroundColor: C.line },
+  teamColName: { fontSize: 13.5, fontWeight: '700', color: C.ink, textAlign: 'center' },
+  scoreCenter: { fontSize: 22, fontWeight: '800', color: C.ink, marginHorizontal: 12, letterSpacing: -0.5 },
+  livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 9 },
+  livePillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.warn, marginRight: 6 },
+  livePillText: { fontSize: 11, fontWeight: '800', color: C.warn, letterSpacing: 0.3 },
 
   // Venues
   venueCard: { borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 16, marginBottom: 12 },
