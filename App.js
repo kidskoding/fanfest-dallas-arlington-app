@@ -16,7 +16,6 @@ import {
 import { NATIONS } from './src/nations';
 import { flagFor } from './src/flags';
 import { LOOKING_TYPES } from './src/lookingTypes';
-import { isWinner, WINNER_CUTOFF } from './src/position';
 import { submitSignup, subscribeToCount } from './src/signup';
 import { shareRank } from './src/share';
 import { buzz, playWinSound } from './src/celebrate';
@@ -26,9 +25,10 @@ const WHATSAPP_GROUP_URL =
   process.env.EXPO_PUBLIC_WHATSAPP_GROUP_URL ||
   'https://chat.whatsapp.com/REPLACE_WITH_REAL_INVITE';
 
-// Display-only social-proof seed added to the live ticker. Does NOT touch the
-// real signup counter, so ranks still start at #1 and the first 100 keep winning.
-const TICKER_SEED = Number(process.env.EXPO_PUBLIC_TICKER_SEED) || 0;
+// Display-only social-proof seed added to the live "fans joined" ticker. Does
+// not touch the real signup counter. Only applied in prod — the dev sandbox
+// shows the true count.
+const TICKER_SEED = env.isDev ? 0 : Number(process.env.EXPO_PUBLIC_TICKER_SEED) || 0;
 
 // Design tokens — one accent, restrained neutrals.
 const C = {
@@ -284,8 +284,8 @@ export default function App() {
 
   useEffect(() => {
     if (position === null) return;
-    buzz(isWinner(position) ? [50, 30, 110] : 30);
-    if (isWinner(position)) playWinSound();
+    buzz([50, 30, 110]); // welcome buzz on joining
+    playWinSound();
   }, [position]);
 
   const canSubmit = !!name.trim() && !!lookingType && !submitting;
@@ -307,7 +307,7 @@ export default function App() {
   const openWhatsApp = () => Linking.openURL(WHATSAPP_GROUP_URL);
 
   const onShare = async () => {
-    const status = await shareRank({ name, position, team, won: isWinner(position) });
+    const status = await shareRank({ name, position });
     if (status === 'copied') setToast('Link copied');
     else if (status === 'shared') setToast('Shared');
     else if (status === 'unsupported') setToast('Sharing unavailable on this device');
@@ -316,28 +316,26 @@ export default function App() {
 
   // ---- Result ----
   if (position !== null) {
-    const won = isWinner(position);
     const meta = [country, team && `${team} supporter`].filter(Boolean).join('  ·  ');
     return (
       <View style={[styles.screen, styles.heroScreen]}>
         <EnvBadge />
-        {won && <Confetti />}
+        <Confetti />
         <View style={styles.heroBody}>
-          <Text style={styles.heroEyebrow}>{won ? 'TOP 100 · PRIZE SECURED' : "YOU'RE ON THE LIST"}</Text>
+          <Text style={styles.heroEyebrow}>YOU'RE IN · FAN</Text>
           <AnimatedCount value={position} style={styles.heroNumber} />
           <Text style={styles.heroName}>{name.trim()}</Text>
           {meta ? <Text style={styles.heroMeta}>{meta}</Text> : null}
           <Text style={styles.heroCopy}>
-            {won
-              ? 'You’re one of the first 100. Your prize is reserved — show this screen at the booth.'
-              : `The first ${WINNER_CUTOFF} win. Share your rank to climb as spots open up.`}
+            Welcome to the FanFest community. Jump into the group chat to meet fans
+            {country ? ` repping ${country}` : ''} and talk all things World Cup.
           </Text>
 
           <PressableScale style={styles.primaryOnHero} onPress={openWhatsApp}>
             <Text style={styles.primaryOnHeroText}>Join the community on WhatsApp</Text>
           </PressableScale>
           <PressableScale style={styles.secondaryOnHero} onPress={onShare}>
-            <Text style={styles.secondaryOnHeroText}>Share my rank</Text>
+            <Text style={styles.secondaryOnHeroText}>Invite friends</Text>
           </PressableScale>
           {toast ? <Text style={styles.toast}>{toast}</Text> : null}
         </View>
@@ -363,8 +361,8 @@ export default function App() {
         <Text style={styles.eyebrow}>FIFA WORLD CUP 2026</Text>
         <Text style={styles.title}>FanFest</Text>
         <Text style={styles.subtitle}>
-          Reserve your spot, join the fan community, and enter to win one of {WINNER_CUTOFF} prizes. The earlier
-          you sign up, the better your odds.
+          The fan community for the World Cup. Sign up to connect with fans from your country and team —
+          then jump into the group chat.
         </Text>
 
         <LiveCount />
@@ -416,9 +414,9 @@ export default function App() {
             onPress={onSubmit}
             disabled={!canSubmit}
           >
-            <Text style={styles.primaryText}>{submitting ? 'Reserving…' : 'Reserve my spot'}</Text>
+            <Text style={styles.primaryText}>{submitting ? 'Joining…' : 'Join FanFest'}</Text>
           </PressableScale>
-          <Text style={styles.fineprint}>No spam. One entry per person.</Text>
+          <Text style={styles.fineprint}>No spam — just fans.</Text>
         </View>
       </Animated.View>
       <StatusBar style="dark" />
