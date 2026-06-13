@@ -1,0 +1,58 @@
+// Flag emoji per FanFest nation. Keyed to the exact names in src/nations.js.
+// Playoff placeholders get a neutral soccer-ball flag.
+const FLAGS = {
+  Algeria: '🇩🇿',
+  Argentina: '🇦🇷',
+  Australia: '🇦🇺',
+  Belgium: '🇧🇪',
+  Bolivia: '🇧🇴',
+  Brazil: '🇧🇷',
+  Cameroon: '🇨🇲',
+  Canada: '🇨🇦',
+  Chile: '🇨🇱',
+  Colombia: '🇨🇴',
+  'Costa Rica': '🇨🇷',
+  Croatia: '🇭🇷',
+  'DR Congo': '🇨🇩',
+  Ecuador: '🇪🇨',
+  Egypt: '🇪🇬',
+  England: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+  France: '🇫🇷',
+  Germany: '🇩🇪',
+  Ghana: '🇬🇭',
+  Honduras: '🇭🇳',
+  Indonesia: '🇮🇩',
+  Iran: '🇮🇷',
+  Italy: '🇮🇹',
+  'Ivory Coast': '🇨🇮',
+  Japan: '🇯🇵',
+  Kenya: '🇰🇪',
+  Mexico: '🇲🇽',
+  Morocco: '🇲🇦',
+  Netherlands: '🇳🇱',
+  'New Zealand': '🇳🇿',
+  Nigeria: '🇳🇬',
+  Panama: '🇵🇦',
+  Paraguay: '🇵🇾',
+  Peru: '🇵🇪',
+  Philippines: '🇵🇭',
+  'Playoff Winner A': '⚽',
+  'Playoff Winner B': '⚽',
+  Poland: '🇵🇱',
+  Portugal: '🇵🇹',
+  Qatar: '🇶🇦',
+  'Saudi Arabia': '🇸🇦',
+  Senegal: '🇸🇳',
+  Serbia: '🇷🇸',
+  'South Korea': '🇰🇷',
+  Spain: '🇪🇸',
+  Turkey: '🇹🇷',
+  'United States': '🇺🇸',
+  Uruguay: '🇺🇾',
+};
+
+function flagFor(nation) {
+  return FLAGS[nation] || '🏳️';
+}
+
+module.exports = { FLAGS, flagFor };
