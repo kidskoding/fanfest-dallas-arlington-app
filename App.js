@@ -71,8 +71,15 @@ const FLAG_FONT =
 const openMaps = (q) =>
   Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`);
 
-// Pre-generated branded QR (join the WhatsApp community) shown on the ticket.
+// Public URL of the app itself — the app-link QR encodes this, and tapping the
+// QR opens it. Override per-deploy with EXPO_PUBLIC_APP_URL.
+const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://fanfest-app.web.app';
+
+// Pre-generated branded QRs shown on the ticket: join the WhatsApp community,
+// and open/share the app. Each is also tappable (same phone can't scan its own
+// screen) — see TicketCard.
 const QR_WHATSAPP = require('./assets/qr/fanfest-whatsapp-branded.png');
+const QR_APP = require('./assets/qr/fanfest-app-branded.png');
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -284,10 +291,24 @@ function LiveCount() {
   );
 }
 
-// Themed event ticket — the fan's keepsake after registering, with the QR to
-// join the community.
+// A single ticket QR: tappable AND scannable. The fan viewing on their own
+// phone can't scan their own screen, so tapping opens the link directly; anyone
+// scanning from another device gets the same destination.
+function TicketQr({ source, url, label }) {
+  return (
+    <PressableScale style={styles.ticketQrItem} onPress={() => Linking.openURL(url)}>
+      <Image source={source} style={styles.ticketQr} resizeMode="contain" />
+      <Text style={styles.ticketQrLabel}>{label}</Text>
+      <Text style={styles.ticketQrHint}>Tap to open · or scan</Text>
+    </PressableScale>
+  );
+}
+
+// Themed event ticket — the fan's keepsake after registering. Shows the country
+// they're rooting for (US fallback) and two tap/scan QRs: WhatsApp + the app.
 function TicketCard({ name, position, country, team, lookingType }) {
-  const metaBits = [country, team && `${team} fan`, lookingType].filter(Boolean);
+  const rootCountry = country || 'United States';
+  const metaBits = [rootCountry, team && `${team} fan`, lookingType].filter(Boolean);
   return (
     <View style={styles.ticket}>
       <View style={styles.ticketStub}>
@@ -303,7 +324,7 @@ function TicketCard({ name, position, country, team, lookingType }) {
             <Text style={styles.ticketNum}>#{position.toLocaleString()}</Text>
           </View>
           <View style={styles.ticketFlags}>
-            {country ? <Text style={styles.ticketFlag}>{flagFor(country)}</Text> : null}
+            <Text style={styles.ticketFlag}>{flagFor(rootCountry)}</Text>
             {team ? <Text style={styles.ticketFlag}>{flagFor(team)}</Text> : null}
           </View>
         </View>
@@ -313,8 +334,8 @@ function TicketCard({ name, position, country, team, lookingType }) {
       </View>
       <View style={styles.perf} />
       <View style={styles.ticketQrWrap}>
-        <Image source={QR_WHATSAPP} style={styles.ticketQr} resizeMode="contain" />
-        <Text style={styles.ticketQrLabel}>Scan to join the community</Text>
+        <TicketQr source={QR_WHATSAPP} url={WHATSAPP_GROUP_URL} label="Join WhatsApp" />
+        <TicketQr source={QR_APP} url={APP_URL} label="Open the app" />
       </View>
     </View>
   );
@@ -815,9 +836,11 @@ const styles = StyleSheet.create({
   ticketFlag: { fontSize: 30, ...FLAG_FONT },
   ticketMeta: { fontSize: 13, color: C.sub, marginTop: 12, ...FLAG_FONT },
   perf: { height: 0, borderTopWidth: 1.5, borderColor: '#D1D5DB', borderStyle: 'dashed', marginHorizontal: 18, marginVertical: 4 },
-  ticketQrWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 22 },
-  ticketQr: { width: 150, height: 150 },
-  ticketQrLabel: { fontSize: 12.5, fontWeight: '700', color: C.sub, marginTop: 8 },
+  ticketQrWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 18, paddingTop: 10, paddingBottom: 22, paddingHorizontal: 16 },
+  ticketQrItem: { alignItems: 'center', flexShrink: 1 },
+  ticketQr: { width: 136, height: 136 },
+  ticketQrLabel: { fontSize: 12.5, fontWeight: '700', color: C.ink, marginTop: 8 },
+  ticketQrHint: { fontSize: 11, fontWeight: '600', color: C.faint, marginTop: 2 },
   ticketActions: { width: '100%', maxWidth: 380, alignSelf: 'center', marginTop: 22 },
 
   // Env badge
