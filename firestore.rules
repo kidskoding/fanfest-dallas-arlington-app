@@ -28,6 +28,13 @@ service cloud.firestore {
              && request.resource.data.lookingGoal is string
              && request.resource.data.lookingGoal.size() <= 280;
     }
+    // A pin trade between two fans. Public (boards are computed client-side from
+    // these). Validated shape; create-only so a trade can't be edited/removed.
+    function validConnection() {
+      return request.resource.data.participants is list
+             && request.resource.data.participants.size() == 2
+             && request.resource.data.fans is map;
+    }
 
     match /signups/{id} {
       allow read: if true; // public directory (no sensitive fields here)
@@ -49,6 +56,18 @@ service cloud.firestore {
     match /signups_private_dev/{id} {
       allow read, delete: if true;
       allow create: if validPrivateSignup();
+      allow update: if false;
+    }
+
+    // -- Pin trades --
+    match /connections/{id} {
+      allow read: if true; // public; pin boards computed client-side
+      allow create: if validConnection();
+      allow update, delete: if false;
+    }
+    match /connections_dev/{id} {
+      allow read, delete: if true;
+      allow create: if validConnection();
       allow update: if false;
     }
 

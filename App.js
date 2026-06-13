@@ -23,6 +23,7 @@ import { FIXTURES } from './src/fixtures';
 import { VENUES } from './src/venues';
 import { fetchUpcoming, groupByDay, dayLabel, timeLabel } from './src/matches';
 import { submitSignup, subscribeToCount, subscribeToFans } from './src/signup';
+import { getPublicFan, recordTrade, subscribeToConnections, collectedCountries } from './src/pins';
 import { shareRank } from './src/share';
 import { buzz, playWinSound } from './src/celebrate';
 import env from './src/env';
@@ -722,10 +723,166 @@ function MatchesScreen() {
 // ---------------------------------------------------------------------------
 // Tab bar + shell
 // ---------------------------------------------------------------------------
+// Persist the fan's identity so the device knows who it is across reloads — the
+// ?fan= trade deep link reloads the page. Web only; no-ops elsewhere.
+const ME_KEY = 'fanfest_me';
+function loadMe() {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(ME_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+function saveMe(me) {
+  try {
+    if (typeof localStorage !== 'undefined' && me) localStorage.setItem(ME_KEY, JSON.stringify(me));
+  } catch (e) {}
+}
+// Dynamic QR image (the fan's personal trade code) via a public QR service.
+const qrUrl = (data, size = 320) =>
+  `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=12&data=${encodeURIComponent(data)}`;
+
+// ---------------------------------------------------------------------------
+// Pins screen — your trade QR, pin board, recent trades
+// ---------------------------------------------------------------------------
+function PinsTab({ me, onJoin }) {
+  const [connections, setConnections] = useState([]);
+  useEffect(() => {
+    if (!me || !me.id) return;
+    return subscribeToConnections(me.id, setConnections);
+  }, [me && me.id]);
+
+  if (!me || !me.id) {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        <EnvBadge />
+        <Text style={styles.eyebrow}>PIN TRADING</Text>
+        <Text style={styles.title}>Collect pins</Text>
+        <Text style={styles.subtitle}>
+          Join FanFest to get your country pin, then trade with fans from around the world — collect all{' '}
+          {NATIONS.length} countries.
+        </Text>
+        <PressableScale style={[styles.primary, { marginTop: 24 }]} onPress={onJoin}>
+          <Text style={styles.primaryText}>Join to start collecting</Text>
+        </PressableScale>
+      </ScrollView>
+    );
+  }
+
+  const collected = collectedCountries(me.id, me.country, connections);
+  const tradeLink = `${APP_URL}?fan=${me.id}`;
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <EnvBadge />
+      <Text style={styles.eyebrow}>YOUR PINS</Text>
+      <Text style={styles.title}>
+        {collected.size} <Text style={styles.pinTotal}>/ {NATIONS.length}</Text>
+      </Text>
+      <Text style={styles.subtitle}>
+        Meet a fan and scan each other's code to trade pins. Collect all {NATIONS.length} countries.
+      </Text>
+
+      <View style={styles.pinQrCard}>
+        <Text style={styles.pinQrTitle}>Show this to trade</Text>
+        <Image source={{ uri: qrUrl(tradeLink) }} style={styles.pinQr} resizeMode="contain" />
+        <Text style={styles.pinQrSub}>
+          {me.firstName}
+          {me.country ? `  ·  ${flagFor(me.country)} ${me.country}` : ''}
+        </Text>
+        <Text style={styles.pinQrHint}>Point your phone camera at a friend's code to collect their pin.</Text>
+      </View>
+
+      <Text style={styles.sectionTitle}>Pin board</Text>
+      <View style={styles.pinGrid}>
+        {NATIONS.map((n) => {
+          const has = collected.has(n);
+          return (
+            <View key={n} style={[styles.pinCell, has && styles.pinCellOn]}>
+              <Text style={[styles.pinCellFlag, !has && styles.pinCellFlagOff]}>{flagFor(n)}</Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {connections.length > 0 && (
+        <>
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Recent trades</Text>
+          {connections.slice(0, 25).map((c) => {
+            const otherId = (c.participants || []).find((p) => p !== me.id);
+            const other = otherId && c.fans ? c.fans[otherId] : null;
+            if (!other) return null;
+            return (
+              <View key={c.id} style={styles.tradeRow}>
+                <Text style={styles.tradeFlag}>{other.country ? flagFor(other.country) : '🏳️'}</Text>
+                <Text style={styles.tradeName} numberOfLines={1}>
+                  {other.firstName || 'A fan'}
+                  {other.country ? `  ·  ${other.country}` : ''}
+                </Text>
+              </View>
+            );
+          })}
+        </>
+      )}
+    </ScrollView>
+  );
+}
+
+// Trade-confirm overlay shown when the app opens via a ?fan= scan deep link.
+function TradeOverlay({ me, fan, msg, onTrade, onClose, onJoin }) {
+  const done = msg.startsWith('Traded') || msg.includes('already');
+  const needsJoin = !me || !me.id;
+  return (
+    <View style={styles.overlay}>
+      <View style={styles.overlayCard}>
+        {fan.missing ? (
+          <>
+            <Text style={styles.overlayTitle}>Pin not found</Text>
+            <Text style={styles.overlaySub}>That code didn't match a fan.</Text>
+            <PressableScale style={styles.overlayBtn} onPress={onClose}>
+              <Text style={styles.overlayBtnText}>Close</Text>
+            </PressableScale>
+          </>
+        ) : (
+          <>
+            <Text style={styles.overlayBig}>{fan.country ? flagFor(fan.country) : '🏳️'}</Text>
+            <Text style={styles.overlayTitle}>
+              {needsJoin ? `${fan.firstName || 'A fan'} wants to trade` : `Trade pins with ${fan.firstName || 'this fan'}?`}
+            </Text>
+            <Text style={styles.overlaySub}>
+              {needsJoin
+                ? 'Join FanFest to get your pin and trade.'
+                : fan.country
+                ? `You'll collect the ${fan.country} pin.`
+                : "You'll collect their pin."}
+            </Text>
+            {msg ? <Text style={styles.overlayMsg}>{msg}</Text> : null}
+            {needsJoin ? (
+              <PressableScale style={styles.overlayBtn} onPress={onJoin}>
+                <Text style={styles.overlayBtnText}>Join to trade</Text>
+              </PressableScale>
+            ) : !done ? (
+              <PressableScale style={styles.overlayBtn} onPress={onTrade}>
+                <Text style={styles.overlayBtnText}>Trade</Text>
+              </PressableScale>
+            ) : null}
+            <PressableScale style={styles.overlayGhost} onPress={onClose}>
+              <Text style={styles.overlayGhostText}>{done ? 'Done' : 'Cancel'}</Text>
+            </PressableScale>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
 const TABS = [
   { key: 'join', label: 'Join' },
   { key: 'fans', label: 'Fans' },
   { key: 'matches', label: 'Matches' },
+  { key: 'pins', label: 'Pins' },
 ];
 
 function TabBar({ tab, setTab }) {
@@ -746,15 +903,85 @@ function TabBar({ tab, setTab }) {
 
 export default function App() {
   const [tab, setTab] = useState('join');
-  const [me, setMe] = useState(null);
+  const [me, setMeState] = useState(null);
+  const [tradeFan, setTradeFan] = useState(null); // fetched fan to confirm a trade
+  const [tradeMsg, setTradeMsg] = useState('');
+
+  const setMe = (m) => {
+    setMeState(m);
+    saveMe(m);
+  };
+
+  // On load: restore saved identity + handle a ?fan= trade deep link (opened by
+  // scanning a fan's QR with the phone camera).
+  useEffect(() => {
+    const saved = loadMe();
+    if (saved) setMeState(saved);
+    if (typeof window !== 'undefined' && window.location && window.location.search) {
+      const fanId = new URLSearchParams(window.location.search).get('fan');
+      if (fanId) {
+        getPublicFan(fanId).then((f) => setTradeFan(f || { id: fanId, missing: true }));
+        try {
+          window.history.replaceState({}, '', window.location.pathname);
+        } catch (e) {}
+      }
+    }
+  }, []);
+
+  const doTrade = async () => {
+    const current = me || loadMe();
+    if (!current || !current.id) {
+      setTradeMsg('Join FanFest first to trade.');
+      return;
+    }
+    if (tradeFan && tradeFan.id === current.id) {
+      setTradeMsg("That's your own pin!");
+      return;
+    }
+    setTradeMsg('Trading…');
+    try {
+      const res = await recordTrade(current, {
+        id: tradeFan.id,
+        firstName: tradeFan.firstName,
+        country: tradeFan.country,
+      });
+      setTradeMsg(
+        res === 'already'
+          ? `Already traded with ${tradeFan.firstName || 'them'}.`
+          : `Traded! You collected the ${tradeFan.country || ''} pin ${tradeFan.country ? flagFor(tradeFan.country) : ''}`.trim()
+      );
+    } catch (e) {
+      setTradeMsg('Trade failed. Try again.');
+    }
+  };
+
+  const closeTrade = () => {
+    setTradeFan(null);
+    setTradeMsg('');
+  };
+
   return (
     <View style={styles.app}>
       <View style={styles.appBody}>
         {tab === 'join' && <JoinScreen onJoined={setMe} onExplore={() => setTab('fans')} />}
         {tab === 'fans' && <FansScreen me={me} />}
         {tab === 'matches' && <MatchesScreen />}
+        {tab === 'pins' && <PinsTab me={me} onJoin={() => setTab('join')} />}
       </View>
       <TabBar tab={tab} setTab={setTab} />
+      {tradeFan && (
+        <TradeOverlay
+          me={me}
+          fan={tradeFan}
+          msg={tradeMsg}
+          onTrade={doTrade}
+          onClose={closeTrade}
+          onJoin={() => {
+            closeTrade();
+            setTab('join');
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -923,4 +1150,32 @@ const styles = StyleSheet.create({
   tabDotActive: { backgroundColor: C.accent },
   tabLabel: { fontSize: 12.5, fontWeight: '700', color: C.faint },
   tabLabelActive: { color: C.ink },
+
+  // Pins
+  pinTotal: { fontSize: 26, fontWeight: '800', color: C.faint },
+  pinQrCard: { alignItems: 'center', backgroundColor: C.accentSoft, borderRadius: 16, paddingVertical: 22, paddingHorizontal: 18, marginTop: 22 },
+  pinQrTitle: { fontSize: 13, fontWeight: '800', color: C.accent, letterSpacing: 0.5 },
+  pinQr: { width: 200, height: 200, marginVertical: 14, backgroundColor: '#fff', borderRadius: 10 },
+  pinQrSub: { fontSize: 15, fontWeight: '700', color: C.ink, ...FLAG_FONT },
+  pinQrHint: { fontSize: 12.5, color: C.sub, marginTop: 8, textAlign: 'center', maxWidth: 260 },
+  pinGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pinCell: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: C.line },
+  pinCellOn: { backgroundColor: C.accentSoft, borderColor: C.accent },
+  pinCellFlag: { fontSize: 24, ...FLAG_FONT },
+  pinCellFlagOff: { opacity: 0.28 },
+  tradeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  tradeFlag: { fontSize: 26, marginRight: 12, ...FLAG_FONT },
+  tradeName: { flex: 1, fontSize: 15, fontWeight: '600', color: C.ink, ...FLAG_FONT },
+
+  // Trade overlay
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,10,15,0.78)', alignItems: 'center', justifyContent: 'center', padding: 28 },
+  overlayCard: { width: '100%', maxWidth: 360, backgroundColor: C.paper, borderRadius: 20, padding: 26, alignItems: 'center' },
+  overlayBig: { fontSize: 64, marginBottom: 8, ...FLAG_FONT },
+  overlayTitle: { fontSize: 22, fontWeight: '800', color: C.ink, textAlign: 'center', letterSpacing: -0.4 },
+  overlaySub: { fontSize: 15, color: C.sub, textAlign: 'center', marginTop: 8, lineHeight: 21 },
+  overlayMsg: { fontSize: 15, fontWeight: '700', color: C.accent, textAlign: 'center', marginTop: 14, ...FLAG_FONT },
+  overlayBtn: { backgroundColor: C.ink, borderRadius: 12, paddingVertical: 15, alignItems: 'center', alignSelf: 'stretch', marginTop: 20 },
+  overlayBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  overlayGhost: { paddingVertical: 12, alignItems: 'center', marginTop: 6 },
+  overlayGhostText: { color: C.sub, fontSize: 14, fontWeight: '600' },
 });
