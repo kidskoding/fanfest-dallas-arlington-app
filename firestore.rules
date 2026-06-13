@@ -1,17 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // MVP: public feed, no sign-in required. Validation guards shape/size to
-    // limit abuse. HARDENING: enable Anonymous Auth + App Check, then require
-    // request.auth != null and pin uid == request.auth.uid.
-    match /messages/{id} {
-      allow read: if true;
-      allow create: if request.resource.data.body is string
-                    && request.resource.data.body.size() > 0
-                    && request.resource.data.body.size() <= 500
-                    && request.resource.data.sid is string
-                    && request.resource.data.sid.size() <= 64;
+    // MVP: public, no auth. Validation guards shape/size to limit abuse.
+    // Accepted MVP risk: public counter writes could be inflated; acceptable
+    // for the event window. HARDENING (parked): Anonymous Auth + App Check.
+
+    match /signups/{id} {
+      allow read: if false;
+      allow create: if request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 100
+                    && request.resource.data.country is string
+                    && request.resource.data.country.size() <= 64
+                    && request.resource.data.team is string
+                    && request.resource.data.team.size() <= 64
+                    && request.resource.data.connectIntent is string
+                    && request.resource.data.connectIntent.size() <= 280
+                    && request.resource.data.position is int;
       allow update, delete: if false;
+    }
+
+    match /counters/{id} {
+      allow read: if true;
+      allow create, update: if request.resource.data.count is int
+                            && request.resource.data.count >= 0;
+      allow delete: if false;
     }
   }
 }
