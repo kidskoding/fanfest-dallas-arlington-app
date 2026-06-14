@@ -23,6 +23,7 @@ import { FIXTURES } from './src/fixtures';
 import { VENUES } from './src/venues';
 import { fetchUpcoming, groupByDay, dayLabel, timeLabel } from './src/matches';
 import { submitSignup, subscribeToCount, subscribeToFans } from './src/signup';
+import { subscribeToFeed } from './src/feed';
 import { getPublicFan, recordTrade, subscribeToConnections, collectedCountries } from './src/pins';
 import { SURVEY_QUESTIONS, submitSurvey } from './src/survey';
 import { shareRank } from './src/share';
@@ -994,9 +995,44 @@ function ContactOverlay({ onClose }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Community feed — every fan's auto-posted intro, newest first
+// ---------------------------------------------------------------------------
+function FeedScreen() {
+  const [items, setItems] = useState(null); // null = loading
+  useEffect(() => subscribeToFeed(setItems), []);
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <EnvBadge />
+      <Text style={styles.eyebrow}>COMMUNITY</Text>
+      <Text style={styles.title}>Feed</Text>
+      <Text style={styles.subtitle}>Every fan says hi as they join. Find your people.</Text>
+
+      {items === null ? (
+        <ActivityIndicator color={C.accent} style={{ marginVertical: 24 }} />
+      ) : items.length === 0 ? (
+        <Text style={styles.muted}>No intros yet — be the first to join!</Text>
+      ) : (
+        items.map((it) => (
+          <View key={it.id} style={styles.feedCard}>
+            <Text style={styles.feedText}>
+              {it.country ? <Flag nation={it.country} /> : null}
+              {it.country ? ' ' : ''}{it.text}
+            </Text>
+            {it.position ? <Text style={styles.feedMeta}>fan #{it.position}</Text> : null}
+          </View>
+        ))
+      )}
+      <StatusBar style="dark" />
+    </ScrollView>
+  );
+}
+
 const TABS = [
   { key: 'join', label: 'Join' },
   { key: 'fans', label: 'Fans' },
+  { key: 'feed', label: 'Feed' },
   { key: 'matches', label: 'Matches' },
   { key: 'pins', label: 'Pins' },
 ];
@@ -1082,6 +1118,7 @@ export default function App() {
       <View style={styles.appBody}>
         {tab === 'join' && <JoinScreen onJoined={setMe} onExplore={() => setTab('fans')} />}
         {tab === 'fans' && <FansScreen me={me} />}
+        {tab === 'feed' && <FeedScreen />}
         {tab === 'matches' && <MatchesScreen />}
         {tab === 'pins' && <PinsTab me={me} onJoin={() => setTab('join')} />}
       </View>
@@ -1118,6 +1155,9 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 15.5, color: C.sub, marginTop: 10, lineHeight: 23 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: C.ink, marginTop: 24, marginBottom: 12, letterSpacing: -0.3 },
   muted: { color: C.faint, fontSize: 14, paddingVertical: 16 },
+  feedCard: { borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 16, marginTop: 12 },
+  feedText: { fontSize: 15.5, color: C.ink, lineHeight: 22, ...FLAG_FONT },
+  feedMeta: { fontSize: 12.5, fontWeight: '700', color: C.accent, marginTop: 8 },
   flag: { ...FLAG_FONT },
 
   live: { flexDirection: 'row', alignItems: 'center', marginTop: 18 },

@@ -35,6 +35,14 @@ service cloud.firestore {
              && request.resource.data.participants.size() == 2
              && request.resource.data.fans is map;
     }
+    // A community-feed intro post. Public, create-only, shape/size validated.
+    function validFeed() {
+      return request.resource.data.text is string
+             && request.resource.data.text.size() > 0
+             && request.resource.data.text.size() <= 400
+             && request.resource.data.firstName is string
+             && request.resource.data.firstName.size() <= 80;
+    }
 
     match /signups/{id} {
       allow read: if true; // public directory (no sensitive fields here)
@@ -80,6 +88,18 @@ service cloud.firestore {
     match /surveys_dev/{id} {
       allow read, delete: if true;
       allow create: if request.resource.data.responses is map;
+      allow update: if false;
+    }
+
+    // -- Community feed (auto-posted fan intros) --
+    match /feed/{id} {
+      allow read: if true; // public community wall
+      allow create: if validFeed();
+      allow update, delete: if false;
+    }
+    match /feed_dev/{id} {
+      allow read, delete: if true;
+      allow create: if validFeed();
       allow update: if false;
     }
 

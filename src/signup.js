@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { nextPosition } from './position';
+import { postIntro } from './feed';
 import env from './env';
 
 // Env-namespaced collections: prod writes to `signups`/`counters/signups`, dev
@@ -81,6 +82,10 @@ export async function submitSignup({ name, country, team, lookingType, lookingGo
     tx.set(counterRef, { count: pos }, { merge: true });
     return pos;
   });
+
+  // Auto-post the fan's intro to the public community feed. Best-effort: a feed
+  // failure must not fail the signup, so swallow errors.
+  postIntro({ firstName, country, team, lookingType, lookingGoal, position }).catch(() => {});
 
   return { position, firstName, id: publicRef.id };
 }
