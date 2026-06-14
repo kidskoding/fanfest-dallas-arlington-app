@@ -24,6 +24,7 @@ import { VENUES } from './src/venues';
 import { fetchUpcoming, groupByDay, dayLabel, timeLabel } from './src/matches';
 import { submitSignup, subscribeToCount, subscribeToFans } from './src/signup';
 import { getPublicFan, recordTrade, subscribeToConnections, collectedCountries } from './src/pins';
+import { SURVEY_QUESTIONS, submitSurvey } from './src/survey';
 import { shareRank } from './src/share';
 import { buzz, playWinSound } from './src/celebrate';
 import env from './src/env';
@@ -355,6 +356,7 @@ function JoinScreen({ onJoined, onExplore }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
+  const [showSurvey, setShowSurvey] = useState(false);
 
   const entrance = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -414,8 +416,14 @@ function JoinScreen({ onJoined, onExplore }) {
           <PressableScale style={styles.ghostOnHero} onPress={onShare}>
             <Text style={styles.ghostOnHeroText}>Invite friends</Text>
           </PressableScale>
+          {SURVEY_QUESTIONS.length > 0 && (
+            <PressableScale style={styles.ghostOnHero} onPress={() => setShowSurvey(true)}>
+              <Text style={styles.ghostOnHeroText}>Help shape FanFest</Text>
+            </PressableScale>
+          )}
           {toast ? <Text style={styles.toast}>{toast}</Text> : null}
         </View>
+        {showSurvey && <SurveyOverlay fanId={result.id} onClose={() => setShowSurvey(false)} />}
         <StatusBar style="light" />
       </ScrollView>
     );
@@ -878,6 +886,77 @@ function TradeOverlay({ me, fan, msg, onTrade, onClose, onJoin }) {
   );
 }
 
+// Fan-insight survey, shown from the ticket screen. Renders whatever is in
+// SURVEY_QUESTIONS (blank for now → entry button stays hidden).
+function SurveyOverlay({ fanId, onClose }) {
+  const [answers, setAnswers] = useState({});
+  const [done, setDone] = useState(false);
+  const set = (id, v) => setAnswers((a) => ({ ...a, [id]: v }));
+  const submit = async () => {
+    try {
+      await submitSurvey(fanId, answers);
+    } catch (e) {}
+    setDone(true);
+  };
+  return (
+    <View style={styles.overlay}>
+      <View style={[styles.overlayCard, styles.surveyCard]}>
+        {done ? (
+          <>
+            <Text style={styles.overlayBig}>🙏</Text>
+            <Text style={styles.overlayTitle}>Thank you</Text>
+            <Text style={styles.overlaySub}>Your answers help shape FanFest.</Text>
+            <PressableScale style={styles.overlayBtn} onPress={onClose}>
+              <Text style={styles.overlayBtnText}>Done</Text>
+            </PressableScale>
+          </>
+        ) : (
+          <ScrollView style={styles.surveyScroll} keyboardShouldPersistTaps="handled">
+            <Text style={styles.overlayTitle}>Quick survey</Text>
+            <Text style={styles.overlaySub}>Help us make FanFest better — takes 30 seconds.</Text>
+            {SURVEY_QUESTIONS.map((q) => (
+              <View key={q.id} style={styles.surveyQ}>
+                <Text style={styles.surveyPrompt}>{q.prompt}</Text>
+                {q.type === 'choice' ? (
+                  <View style={styles.surveyChoices}>
+                    {(q.options || []).map((opt) => {
+                      const on = answers[q.id] === opt;
+                      return (
+                        <PressableScale
+                          key={opt}
+                          style={[styles.surveyChoice, on && styles.surveyChoiceOn]}
+                          onPress={() => set(q.id, opt)}
+                        >
+                          <Text style={[styles.surveyChoiceText, on && styles.surveyChoiceTextOn]}>{opt}</Text>
+                        </PressableScale>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <TextInput
+                    style={[styles.input, styles.surveyInput]}
+                    value={answers[q.id] || ''}
+                    onChangeText={(t) => set(q.id, t)}
+                    placeholder="Your answer"
+                    placeholderTextColor={C.faint}
+                    multiline
+                  />
+                )}
+              </View>
+            ))}
+            <PressableScale style={styles.overlayBtn} onPress={submit}>
+              <Text style={styles.overlayBtnText}>Submit</Text>
+            </PressableScale>
+            <PressableScale style={styles.overlayGhost} onPress={onClose}>
+              <Text style={styles.overlayGhostText}>Maybe later</Text>
+            </PressableScale>
+          </ScrollView>
+        )}
+      </View>
+    </View>
+  );
+}
+
 const TABS = [
   { key: 'join', label: 'Join' },
   { key: 'fans', label: 'Fans' },
@@ -1178,4 +1257,16 @@ const styles = StyleSheet.create({
   overlayBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   overlayGhost: { paddingVertical: 12, alignItems: 'center', marginTop: 6 },
   overlayGhostText: { color: C.sub, fontSize: 14, fontWeight: '600' },
+
+  // Survey
+  surveyCard: { maxHeight: '86%', alignItems: 'stretch' },
+  surveyScroll: { alignSelf: 'stretch' },
+  surveyQ: { marginTop: 20 },
+  surveyPrompt: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: 10 },
+  surveyInput: { minHeight: 48, textAlignVertical: 'top' },
+  surveyChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  surveyChoice: { borderWidth: 1, borderColor: C.line, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 14 },
+  surveyChoiceOn: { backgroundColor: C.ink, borderColor: C.ink },
+  surveyChoiceText: { fontSize: 14, fontWeight: '600', color: C.sub },
+  surveyChoiceTextOn: { color: '#fff' },
 });

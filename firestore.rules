@@ -71,6 +71,18 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // -- Fan-insight surveys (organizer-only, like signups_private) --
+    match /surveys/{id} {
+      allow read: if false;
+      allow create: if request.resource.data.responses is map;
+      allow update, delete: if false;
+    }
+    match /surveys_dev/{id} {
+      allow read, delete: if true;
+      allow create: if request.resource.data.responses is map;
+      allow update: if false;
+    }
+
     match /counters/{id} {
       allow read: if true;
       allow create, update: if request.resource.data.count is int
