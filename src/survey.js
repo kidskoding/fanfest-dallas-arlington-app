@@ -14,7 +14,40 @@ import env from './env';
 //   { id: 'missing', type: 'text',   prompt: "What's one thing FanFest is missing?" },
 //   { id: 'wish',    type: 'text',   prompt: 'What did you wish was here?' },
 //   { id: 'heard',   type: 'choice', prompt: 'How did you hear about us?', options: ['Friend', 'At the booth', 'Social media', 'Other'] },
-export const SURVEY_QUESTIONS = [];
+export const SURVEY_QUESTIONS = [
+  // Validate the app's pillars — what fans actually want tells you what to build.
+  {
+    id: 'want',
+    type: 'choice',
+    prompt: 'What do you want most out of FanFest?',
+    options: ['Meet fellow fans', 'Find watch parties', 'Trade pins & merch', 'Deals & giveaways', 'Just the atmosphere'],
+  },
+  // Behavior — where/how they watch tells you where to reach them.
+  {
+    id: 'following',
+    type: 'choice',
+    prompt: 'How are you following the World Cup?',
+    options: ['At the stadium', 'Watch parties & bars', 'At home', 'On my phone', 'Highlights only'],
+  },
+  // Group size — useful for venues, capacity, and marketing.
+  {
+    id: 'withWho',
+    type: 'choice',
+    prompt: 'Who are you here with?',
+    options: ['Solo', 'Friends', 'Family', 'A big group'],
+  },
+  // Lightweight NPS — measures whether the app/event is worth spreading.
+  {
+    id: 'recommend',
+    type: 'choice',
+    prompt: 'How likely are you to tell a friend about FanFest?',
+    options: ['Not likely', 'Maybe', 'Very likely'],
+  },
+  // The qualitative gold — the brainstorm's core "what's missing" question.
+  { id: 'missing', type: 'text', prompt: "What's one thing FanFest is missing?" },
+  // Fun + sentiment — gets a fast answer and reveals fan passion.
+  { id: 'winner', type: 'text', prompt: 'Who do you think will win the World Cup?' },
+];
 
 const SURVEYS = `surveys${env.suffix}`;
 
