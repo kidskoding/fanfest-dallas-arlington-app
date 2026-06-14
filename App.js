@@ -957,6 +957,43 @@ function SurveyOverlay({ fanId, onClose }) {
   );
 }
 
+// The makers — surfaced via the top-right Contact button.
+const CONTACTS = [
+  { name: 'Anirudh Konidala', url: 'https://www.linkedin.com/in/anirudh-konidala/' },
+  { name: 'Itay Gozalzani', url: 'https://www.linkedin.com/in/itay-gozalzani/' },
+];
+
+// Fixed top-right button (works on light + dark screens via the white chip).
+function ContactButton({ onPress }) {
+  return (
+    <PressableScale style={styles.contactBtn} onPress={onPress}>
+      <Text style={styles.contactBtnText}>Contact</Text>
+    </PressableScale>
+  );
+}
+
+function ContactOverlay({ onClose }) {
+  return (
+    <View style={styles.overlay}>
+      <View style={styles.overlayCard}>
+        <Text style={styles.overlayTitle}>Made by</Text>
+        <Text style={styles.overlaySub}>Questions, ideas, or partnerships? Reach out.</Text>
+        <View style={styles.contactList}>
+          {CONTACTS.map((c) => (
+            <PressableScale key={c.url} style={styles.contactRow} onPress={() => Linking.openURL(c.url)}>
+              <Text style={styles.contactName}>{c.name}</Text>
+              <Text style={styles.contactLink}>Connect on LinkedIn ↗</Text>
+            </PressableScale>
+          ))}
+        </View>
+        <PressableScale style={styles.overlayGhost} onPress={onClose}>
+          <Text style={styles.overlayGhostText}>Close</Text>
+        </PressableScale>
+      </View>
+    </View>
+  );
+}
+
 const TABS = [
   { key: 'join', label: 'Join' },
   { key: 'fans', label: 'Fans' },
@@ -985,6 +1022,7 @@ export default function App() {
   const [me, setMeState] = useState(null);
   const [tradeFan, setTradeFan] = useState(null); // fetched fan to confirm a trade
   const [tradeMsg, setTradeMsg] = useState('');
+  const [showContact, setShowContact] = useState(false);
 
   const setMe = (m) => {
     setMeState(m);
@@ -1048,6 +1086,8 @@ export default function App() {
         {tab === 'pins' && <PinsTab me={me} onJoin={() => setTab('join')} />}
       </View>
       <TabBar tab={tab} setTab={setTab} />
+      <ContactButton onPress={() => setShowContact(true)} />
+      {showContact && <ContactOverlay onClose={() => setShowContact(false)} />}
       {tradeFan && (
         <TradeOverlay
           me={me}
@@ -1269,4 +1309,24 @@ const styles = StyleSheet.create({
   surveyChoiceOn: { backgroundColor: C.ink, borderColor: C.ink },
   surveyChoiceText: { fontSize: 14, fontWeight: '600', color: C.sub },
   surveyChoiceTextOn: { color: '#fff' },
+
+  // Contact
+  contactBtn: {
+    position: 'absolute',
+    top: Platform.OS === 'web' ? 14 : 44,
+    right: 16,
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+    borderWidth: 1,
+    borderColor: C.line,
+    zIndex: 50,
+    ...SHADOW,
+  },
+  contactBtnText: { fontSize: 12.5, fontWeight: '700', color: C.ink },
+  contactList: { alignSelf: 'stretch', marginTop: 18, gap: 10 },
+  contactRow: { borderWidth: 1, borderColor: C.line, borderRadius: 12, padding: 14 },
+  contactName: { fontSize: 16, fontWeight: '700', color: C.ink },
+  contactLink: { fontSize: 13, fontWeight: '600', color: C.accent, marginTop: 3 },
 });
